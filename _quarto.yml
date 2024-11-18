@@ -8,13 +8,13 @@ website:
     left:
       - href: index.qmd
         text: "Index"
-      - href: template_doc.qmd
-        text: "template_doc"  
-      - href: template_ppt.qmd
-        text: "template_ppt"  
+      - href: geom_doc.qmd
+        text: "Geométrie (doc)"  
+      - href: geom_ppt.qmd
+        text: "Géometrie (ppt)"  
     right: 
       - icon: github # add icons as navbar buttons
-        href: https://github.com/worldregio/pew_opi
+        href: https://github.com/worldregio/theoregio
         target: _blank
   page-footer:
     background: dark

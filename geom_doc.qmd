@@ -1,0 +1,249 @@
+---
+title: "Théorie de la régionalisation"
+subtitle: "Géométries"
+date: "2024-11-18"
+date-format: iso
+author: "Claude Grasland"
+lang: fr
+format:
+  html:
+    embed-resources: true
+    smooth-scroll: true
+    fontsize: 0.9em
+    toc: true
+    toc-depth: 2
+    toc-title: "."
+    bibliography: [references.bib]
+    crossrefs-hover: false
+    theme: [yeti, style.scss]
+execute:
+  warning: false
+  message: false 
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor_options: 
+  chunk_output_type: console
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+![](img/header.png)
+
+```{r, quietly = T,verbose = F,warn.conflicts = F,logical.return = F, warning=F, echo=FALSE,message=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(knitr)
+library(FactoMineR)
+```
+
+
+
+
+Commençons pas examiner le rôle de la géométrie dans la production d'une régionalisation. On suppose ici que le Monde se réduit à un ensemble de points et l'on cherche donc juste à regrouper les points les plus proches en régions.
+
+
+
+# A. Le monde est un segment ...
+
+Imaginons que le monde se réduise à une ligne comme la future ville de Neom en Arabie Saoudite
+
+
+![](img/neom.jpg)
+
+## Données 
+
+On tire au hasard 12 positions $X_1 ...X_{12}$à l'intérieur de ce Monde en imposant comme seule contrainte que deux individus ne peuvent pas occuper la même position. Cela signifie qu'il existe une distance minimale entre deux individus qu'on fixera par exemple à 1.
+
+```{r}
+n=12
+X <- c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
+coo<-data.frame(X)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo)
+```
+
+## Visualisation
+
+On peut visualiser facilement le résultat en adoptant une direction quelconque puisque notre ligne n'est pas *orientée* vers une direction particulière
+
+```{r}
+par(mfrow=c(1,1))
+plot(X, rep(0,n), pch=20, cex=0.8, col="red",
+     xlab = "Xi", ylab = NA, xlim = c(-180, 180),
+     main = "Le monde est un segment...")
+text(X, rep(0,n),row.names(coo), pos=3, cex=0.6)
+segments(-180,0,180,0, col="blue")
+```
+
+
+## Distances
+
+Dans notre monde linéaire on construite une distance $D_{ij}$ qui sera par définition une fonction de la seule variable de localisation $X_i$. Un choix évident est la différence en valeur absolue :
+
+$D_{ij} = |X_i - X_j|$
+
+Comme notre monde est *fini* on peut normaliser la distance sur l'intervalle $[0 ; 1]$ en divisant les valeurs de distance par la valeur maximale *possible* (de préférence à la valeur maximale observée).
+
+$D_{ij}^{norm} = |X_i - X_j|/ D_{max}$
+
+Le maximum possible étant pour nous égal ici à $D_{max} = 360$, la matrice de distance se calcule sans difficultés avec la fonction `dist()`de R-base :
+
+```{r, echo=T}
+Dij = dist(coo,diag = T, upper = T,method = "euclidean")
+Dij = Dij/360
+kable(as.matrix(Dij),
+      caption = "Matrice de distance normalisée",
+      digits=2)
+```
+
+## Classification
+
+Dans notre espace à une dimension, la variable $X_i$ peut correspondre indifféremment à une position spatiale ou à un attribut statistique. Le choix d'une méthode de régionalisation revient donc ici à une simple classification visant à minimiser les distances intra-classes et maximiser les distances inter-classes. Il suffit donc d'appliquer un programme de classification pour obtenir une régionalisation de notre espace. 
+
+
+On peut utiliser ici la procédure `hclust` de R-base
+
+```{r}
+reg<-hclust(Dij)
+plot(reg,hang = -1,
+     main = "Classification / Régionalisation",
+     xlab = "Positions",
+     ylab = "Distance normalisée")
+```
+
+
+On peut encore plus simplement utiliser la procédure `kmeans` de R-base mais en fixant le nombre de classes
+
+```{r}
+clus<-kmeans(x = as.matrix(Dij),centers = 3)
+par(mfrow=c(1,1))
+plot(X, rep(0,n), 
+     pch=20, 
+     cex=0.7, 
+     col=clus$cluster,
+     xlab = "Xi",
+     ylab = NA, 
+     xlim = c(-180, 180),
+     main = "Les trois régions du monde segmentaire")
+text(X, rep(0,n),row.names(coo), pos=3, cex=0.6)
+```
+
+
+
+# B. Le monde est un cercle ...
+
+
+Imaginons maintenant que le monde se réduit à une cercle autour d'une planète, comme dans le cas des anneaux de Saturne
+
+![](img/saturne.jpg)
+
+
+## Données
+
+On tire au hasard 12 positions de longitude $Lon_1 ...Lon _{12}$ et on fixe toutes les latitudes à 0.
+
+
+
+```{r}
+Lon <-   c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
+Lat <- rep(0,12)
+coo<-data.frame(Lon, Lat)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo, caprion = "Coordonnées de latitude et longitude")
+```
+
+
+Il s'agit apparemment de la même situation que précédemment (les valeurs de longitude retenue correspondent aux valeurs précédentes de X) mais la géométrie n'est plus la même ce qui change fondamentalement les distances.
+
+## Visualisation
+
+Si l'on veut visualiser correctement les distances entre les points, il faut adopter une projection polaire qui respecte les distances. Si l'on suppose que notre planète à un rayon de 1000 km, on peut construire les coordonnées suivantes : 
+
+
+```{r}
+x<-cos(pi*coo$Lon/180)*1000
+y<-sin(pi*coo$Lon/180)*1000
+coo2<-data.frame(x,y)
+row.names(coo2)<-row.names(coo)
+kable(coo2, caption = "Coordonnées en projection polaire (R = 1000 km)")
+
+
+```
+
+Ce qui donne l'image suivante :
+
+```{r}
+plot(coo2,
+     asp = 1, 
+     pch=20,
+     col="red",
+     cex=0.8,
+     ylim= c(-1200, 1200),
+     main = "Le monde est un cercle ...")
+text(coo2,
+     row.names(coo2),
+     pos=3,
+     cex=0.6,
+     col="black")
+z<-seq(-pi, pi+0.1, 0.1)
+zx<-cos(z)*1000
+zy<-sin(z)*1000
+lines(cbind(zx,zy),col="blue")
+
+```
+
+
+## Distances
+
+Dans notre monde circulaire, il n'est pas possible de se déplacer en ligne droite. Les distances correspondent donc aux trajets effectués sur un arc de cercle ce qui donne une valeur maximale égale à $2 \times \pi \times R$ avec $R$ égal au rayon du cercle. On normalise par la distance maximale.
+
+```{r}
+library(circular)
+C<-circular(coo, type="angles",units="degrees")
+  D<-dist.circular(C,diag = T, upper=T,method ="angularseparation")
+kable(as.matrix(D), caption = "Distance circulaire normalisée", digits=2)
+```
+
+La distance maximale est alors observée entre des points situés à l'opposé l'un de l'autre sur le cercle comme A et D. Mais en revanche les points qui étaient auparavant très éloignés dans le monde du segment comme A et L sont désormais très proches dans le monde du cercle puisque celui-ci se referme à leur niveau.
+
+## Régionalisation 
+
+Dans notre monde circulaire, la classification est très différente de celle observée dans le monde du segment alors même que les valeurs numériques sont au départ les mêmes. C'est la projection qui diffère.
+
+
+```{r}
+
+
+reg<-hclust(D)
+plot(reg,hang = -1,
+     main = "Classification / Régionalisation",
+     xlab = "Positions",
+     ylab = "Distance normalisée")
+```
+
+
+On va utilise la procédure `kmeans` de R-base  en fixant le nombre de classes à trois comme précédemment
+
+```{r}
+clus<-kmeans(x = D,centers = 3)
+plot(coo2,
+     asp = 1, 
+     pch=20,
+     col=clus$cluster,
+     cex=0.8,
+     ylim= c(-1200, 1200),
+     main = "Les trois régions du monde circulaire")
+text(coo2,
+     row.names(coo2),
+     pos=3,
+     cex=0.6,
+     col="black")
+z<-seq(-pi, pi+0.1, 0.1)
+zx<-cos(z)*1000
+zy<-sin(z)*1000
+lines(cbind(zx,zy),col="blue")
+```
+
