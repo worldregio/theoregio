@@ -1,0 +1,135 @@
+[
+  {
+    "objectID": "template_ppt.html#getting-up",
+    "href": "template_ppt.html#getting-up",
+    "title": "Titre de la présentation",
+    "section": "Getting up",
+    "text": "Getting up\n\nTurn off alarm\nGet out of bed"
+  },
+  {
+    "objectID": "template_ppt.html#going-to-sleep",
+    "href": "template_ppt.html#going-to-sleep",
+    "title": "Titre de la présentation",
+    "section": "Going to sleep",
+    "text": "Going to sleep\n\n\nGet in bed\nCount sheep"
+  },
+  {
+    "objectID": "template_ppt.html#slide-with-a-pause",
+    "href": "template_ppt.html#slide-with-a-pause",
+    "title": "Titre de la présentation",
+    "section": "Slide with a pause",
+    "text": "Slide with a pause\ncontent before the pause\n\n# Ici du code R par exemple\n\n\ncontent after the pause\n\n# Ici un second code R"
+  },
+  {
+    "objectID": "template_ppt.html#slide-with-speaker-notes",
+    "href": "template_ppt.html#slide-with-speaker-notes",
+    "title": "Titre de la présentation",
+    "section": "Slide with speaker notes",
+    "text": "Slide with speaker notes\nSlide content\nAppuyez sur la touche “s” pour faire apparaitre la vue présentateur avec l’horloge et les notes, ou passez par le menu en bas à gauche puis tools puis “Speaker View”\n\nIci quelques notes personnelles pour ne pas perdre le fil"
+  },
+  {
+    "objectID": "template_ppt.html#slide-with-a-footnote",
+    "href": "template_ppt.html#slide-with-a-footnote",
+    "title": "Titre de la présentation",
+    "section": "Slide with a footnote",
+    "text": "Slide with a footnote\n\nGreen 1\nBrown\nPurple\n\n\n\nSome additional commentary of more peripheral interest.\nA footnote"
+  },
+  {
+    "objectID": "template_ppt.html#deux-colonnes-sans-code",
+    "href": "template_ppt.html#deux-colonnes-sans-code",
+    "title": "Titre de la présentation",
+    "section": "Deux colonnes sans code",
+    "text": "Deux colonnes sans code\n\n\nIci du texte ou du code et l’exécuter en faisant des références à mapsf par exemple (R-mapsf?).\n\nIci une image\n\n\n\nLogo de l’école thématique GeoUniv’R 2024 Tunisie"
+  },
+  {
+    "objectID": "template_ppt.html#deux-colonnes-une-code-une-résultat",
+    "href": "template_ppt.html#deux-colonnes-une-code-une-résultat",
+    "title": "Titre de la présentation",
+    "section": "Deux colonnes, une code, une résultat",
+    "text": "Deux colonnes, une code, une résultat\nIci pas besoin de construire des divs avec les “:::”. Il faut renseigner le parametre “output-location” dans le chunk à éxécuter\n\n\n# Sample data\nset.seed(132)\nx &lt;- seq(1, 10, by = 0.05)\ny &lt;- x ^ 2 + rnorm(x, sd = 10)\n\n# Plotting \nplot(x, y, pch = 19, col = 4)"
+  },
+  {
+    "objectID": "template_ppt.html#autres-configurations-12",
+    "href": "template_ppt.html#autres-configurations-12",
+    "title": "Titre de la présentation",
+    "section": "Autres configurations 1/2",
+    "text": "Autres configurations 1/2\nOn peut aussi configurer la mise en avant de certaines lignes dans le chunk avec le parametre #| code-line-numbers: \"4,5\". Attention, il s’agit des lignes du chunk isolé, pas des lignes du document qmd entier.\n\n\n# Sample data\nset.seed(132)\nx &lt;- seq(1, 10, by = 0.05)\ny &lt;- x ^ 2 + rnorm(x, sd = 10)\n\n# Plotting \nplot(x, y, pch = 19, col = 4)"
+  },
+  {
+    "objectID": "template_ppt.html#autres-configurations-22",
+    "href": "template_ppt.html#autres-configurations-22",
+    "title": "Titre de la présentation",
+    "section": "Autres configurations 2/2",
+    "text": "Autres configurations 2/2\nEnfin on peut incrémenter la mise en valeur des lignes et l’apparition du résultat:\nL’incrémentation des lignes avec le symbole ” | ” : #| code-line-numbers: \"|4,5|8\".\nL’apparition du résultat en dernier dans la colonne #| output-location: column-fragment\n\n\n# Sample data\nset.seed(132)\nx &lt;- seq(1, 10, by = 0.05)\ny &lt;- x ^ 2 + rnorm(x, sd = 10)\n\n# Plotting \nplot(x, y, pch = 19, col = 4)"
+  },
+  {
+    "objectID": "template_ppt.html#changer-la-taille-du-code-manuellement",
+    "href": "template_ppt.html#changer-la-taille-du-code-manuellement",
+    "title": "Titre de la présentation",
+    "section": "Changer la taille du code manuellement",
+    "text": "Changer la taille du code manuellement\n\n\nletters &lt;- c(\"a\",\"b\",\"c\")\nnumbers &lt;- c(1,2,3)\ncolors &lt;- c(\"blue\", \"red\", \"yellow\")\n\ndf &lt;- data.frame(letters, numbers, colors)\n\ndf\n\n\n  letters numbers colors\n1       a       1   blue\n2       b       2    red\n3       c       3 yellow"
+  },
+  {
+    "objectID": "template_ppt.html#changer-la-taille-du-résultat-du-code-manuellement",
+    "href": "template_ppt.html#changer-la-taille-du-résultat-du-code-manuellement",
+    "title": "Titre de la présentation",
+    "section": "Changer la taille du résultat du code manuellement",
+    "text": "Changer la taille du résultat du code manuellement\n\n\ndf\n\n\n  letters numbers colors\n1       a       1   blue\n2       b       2    red\n3       c       3 yellow"
+  },
+  {
+    "objectID": "template_ppt.html#pour-plus-daide",
+    "href": "template_ppt.html#pour-plus-daide",
+    "title": "Titre de la présentation",
+    "section": "Pour plus d’aide",
+    "text": "Pour plus d’aide\ndocumentation Quarto\n\nBig Text"
+  },
+  {
+    "objectID": "template_ppt.html#références",
+    "href": "template_ppt.html#références",
+    "title": "Titre de la présentation",
+    "section": "Références",
+    "text": "Références"
+  },
+  {
+    "objectID": "template_ppt.html#session-info",
+    "href": "template_ppt.html#session-info",
+    "title": "Titre de la présentation",
+    "section": "Session-info",
+    "text": "Session-info\n\nsessionInfo()\n\nR version 4.4.1 (2024-06-14)\nPlatform: x86_64-apple-darwin20\nRunning under: macOS 15.1\n\nMatrix products: default\nBLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib \nLAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0\n\nlocale:\n[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8\n\ntime zone: Europe/Paris\ntzcode source: internal\n\nattached base packages:\n[1] stats     graphics  grDevices utils     datasets  methods   base     \n\nloaded via a namespace (and not attached):\n [1] compiler_4.4.1    fastmap_1.2.0     cli_3.6.3         tools_4.4.1      \n [5] htmltools_0.5.8.1 rstudioapi_0.17.1 yaml_2.3.10       rmarkdown_2.28   \n [9] knitr_1.48        jsonlite_1.8.9    xfun_0.48         digest_0.6.37    \n[13] rlang_1.1.4       evaluate_1.0.1   \n\n\n\n\n\nGeo Univ’R 2024 - Tunisie"
+  },
+  {
+    "objectID": "template_doc.html",
+    "href": "template_doc.html",
+    "title": "Titre du module",
+    "section": "",
+    "text": "Vous pouvez utiliser la bannière par défaut ou en ajouter une :"
+  },
+  {
+    "objectID": "template_doc.html#titre-de-niveau-2",
+    "href": "template_doc.html#titre-de-niveau-2",
+    "title": "Titre du module",
+    "section": "Titre de niveau 2",
+    "text": "Titre de niveau 2\nEt ecrire du texte ou du code et l’exécuter en faisant des références à mapsf par exemple (R-mapsf?)."
+  },
+  {
+    "objectID": "template_doc.html#utiliser-les-call-out-blocks",
+    "href": "template_doc.html#utiliser-les-call-out-blocks",
+    "title": "Titre du module",
+    "section": "Utiliser les call-out blocks",
+    "text": "Utiliser les call-out blocks\n\nPour renvoyer à un autre document\n\n\n\n\n\n\nAstuce\n\n\n\nPour plus de détail sur la cartographie avec le package sf je vous renvoie au notebook de N. Lambert conçu pour l’école thématique : Faire des cartes thématiques avec R\n\n\n\n\nPour mettre le résultat d’un chunk dans un menu déroulant\n\n\n\n\n\n\nTitre du menu déroulant\n\n\n\n\n\n```{r}\n#| eval: false\nst_crs(del)\n```"
+  },
+  {
+    "objectID": "template_doc.html#autre-options-utiles",
+    "href": "template_doc.html#autre-options-utiles",
+    "title": "Titre du module",
+    "section": "Autre options utiles",
+    "text": "Autre options utiles\n\nFaire des colonnes pour placer ses figures\n\n\n\nHello World\n\n\nEt ici un texte pour accompagner la ?@fig-univ qui représente l’école thématique\n\n\n\n\n\n\n\n\n\n\nA propos de ce document\n\n\n\nCe support a été créé pour la semaine de formation franco-tunisienne GEO UNIV’R Tunisie 2024 - “Enseigner la statistique, la cartographie et l’analyse spatiale avec R qui se tient à Sousse en mai 2024.\n\n\n\nRéférences\n\n\n\n\n\nsessionInfo()\n\nR version 4.4.1 (2024-06-14)\nPlatform: x86_64-apple-darwin20\nRunning under: macOS 15.1\n\nMatrix products: default\nBLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib \nLAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0\n\nlocale:\n[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8\n\ntime zone: Europe/Paris\ntzcode source: internal\n\nattached base packages:\n[1] stats     graphics  grDevices utils     datasets  methods   base     \n\nloaded via a namespace (and not attached):\n [1] htmlwidgets_1.6.4 compiler_4.4.1    fastmap_1.2.0     cli_3.6.3        \n [5] tools_4.4.1       htmltools_0.5.8.1 rstudioapi_0.17.1 yaml_2.3.10      \n [9] rmarkdown_2.28    knitr_1.48        jsonlite_1.8.9    xfun_0.48        \n[13] digest_0.6.37     rlang_1.1.4       evaluate_1.0.1"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "bidon",
+    "section": "",
+    "text": "Hello World !"
+  }
+]

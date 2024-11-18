@@ -1,0 +1,30 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "TheoRegio"
+  navbar:
+    left:
+      - href: index.qmd
+        text: "Index"
+      - href: template_doc.qmd
+        text: "template_doc"  
+      - href: template_ppt.qmd
+        text: "template_ppt"  
+    right: 
+      - icon: github # add icons as navbar buttons
+        href: https://github.com/worldregio/pew_opi
+        target: _blank
+  page-footer:
+    background: dark
+    left: Copyright 2024, Claude Grasland
+format:
+  html:
+    theme: 
+      light: minty    
+      dark: solar
+    css: styles.css
+    toc: true
+
+
