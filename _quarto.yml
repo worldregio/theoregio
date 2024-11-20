@@ -9,9 +9,7 @@ website:
       - href: index.qmd
         text: "Index"
       - href: geom_doc.qmd
-        text: "Geométrie (doc)"  
-      - href: geom_ppt.qmd
-        text: "Géometrie (ppt)"  
+        text: "Geométries"  
     right: 
       - icon: github # add icons as navbar buttons
         href: https://github.com/worldregio/theoregio

@@ -1,5 +1,9 @@
 ---
-title: "bidon"
+title: "Minimum théorique"
 ---
 
-Hello World !
+L'objet de ce petit site web est de développer les aspects théoriques de la régionalisation d'un monde abstrait.
+
+## Géométries
+
+Ce chapitre s'intéresse aux différentes formes de géométrie du monde que l'on veut régionaliser. Cela revient à en définir la topologie et le type de distance que l'on peut mesurer entre des individus localisés en différentes positions de ce monde. Le nombre de position est supposé fini et forme l'oekoumène. A partir d'une distribution d'invidus localisé dans ce monde, on peut proposer des régionalisations fondées sur des potentiels d'accessibilité à condition de définir à la fois une distance et une fonction de décroissance des interactions avec cette distance
