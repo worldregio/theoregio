@@ -1,0 +1,475 @@
+---
+title: "Géometries de mondes abstraits"
+subtitle: "Régionalisation d'un semis de population en fonction d'une distance"
+date: "2024-11-18"
+date-format: iso
+author: "Claude Grasland"
+lang: fr
+format:
+  html:
+    embed-resources: true
+    smooth-scroll: true
+    fontsize: 0.9em
+    toc: true
+    toc-depth: 3
+    toc-title: "."
+    bibliography: [references.bib]
+    crossrefs-hover: false
+    theme: [yeti, style.scss]
+execute:
+  warning: false
+  message: false 
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor_options: 
+  chunk_output_type: console
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+![](img/header.png)
+
+```{r, quietly = T,verbose = F,warn.conflicts = F,logical.return = F, warning=F, echo=FALSE,message=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(knitr)
+library(FactoMineR)
+library(circular)
+```
+
+Commençons pas examiner le rôle de la géométrie dans la production d'une régionalisation. On suppose ici que le Monde se réduit à un ensemble de points et l'on cherche donc juste à regrouper les points les plus proches en régions. Le critère de régionalisation sera donc l'accessibilité ce qui reviendra à former des ensembles de points tels
+que :
+
+-   les points situés dans une même région soient le plus proche
+    possibles
+-   les points situés dans deux régions soient le plus éloignés
+    possibles
+
+Il faut donc définir une mesure de proximité $D_{ij}$ entre les points puis choisir un critère à optimiser $H(D,R)$ qui dépendra de la distance entre les points et de leur affectation à l'une des régions.
+
+# A. MONDES UNIDIMENSIONNELS
+
+## A.1 Le monde est un segment ...
+
+Imaginons que le monde se réduise à une ligne comme la future ville de Neom en Arabie Saoudite
+
+![](img/neom.jpg)
+
+### Données
+
+On tire au hasard 12 positions $X_1 ...X_{12}$à l'intérieur de ce Monde en imposant comme seule contrainte que deux individus ne peuvent pas occuper la même position. Cela signifie qu'il existe une distance minimale entre deux individus qu'on fixera par exemple à 1.
+
+```{r}
+n=12
+X <- c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
+coo<-data.frame(X)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo)
+```
+
+### Visualisation
+
+On peut visualiser facilement le résultat en adoptant une direction quelconque puisque notre ligne n'est pas *orientée* vers une direction particulière.
+
+```{r}
+par(mfrow=c(1,1))
+plot(X, rep(0,n), 
+     pch=20, 
+     xlab = NA,
+     ylab = NA,
+     xlim = c(-180, 180),
+     ylim =c (-100,100),
+     main = "Le monde est un segment...")
+segments(-180,0,180,0, col="gray",lwd=2)
+segments(-180,5,-180,-5, col="gray",lwd=2)
+segments(180,5,180,-5, col="gray",lwd=2)
+points(X, rep(0,n), 
+     pch=20, 
+     cex = 2, 
+     col="red")
+text(X, rep(0,n),row.names(coo), pos=3, cex=1)
+
+```
+
+### Distances
+
+Dans notre monde linéaire on construite une distance $D_{ij}$ qui sera par définition une fonction de la seule variable de localisation $X_i$. Un choix évident est la différence en valeur absolue :
+
+$D_{ij} = |X_i - X_j|$
+
+Comme notre monde est *fini* on peut normaliser la distance sur l'intervalle $[0 ; 1]$ en divisant les valeurs de distance par la valeur maximale *possible* (de préférence à la valeur maximale observée).
+
+$D_{ij}^{norm} = |X_i - X_j|/ D_{max}$
+
+Le maximum possible étant pour nous égal ici à $D_{max} = 360$, la matrice de distance se calcule sans difficultés avec la fonction `dist()`de R-base :
+
+```{r, echo=T}
+Dij = dist(coo,diag = T, upper = T,method = "euclidean")
+Dij = Dij/360
+kable(as.matrix(Dij),
+      caption = "Matrice de distance normalisée",
+      digits=2)
+```
+
+### Partition
+
+Dans notre espace à une dimension, la variable $X_i$ peut correspondre indifféremment à une position spatiale ou à un attribut statistique. Le choix d'une méthode de régionalisation revient donc ici à une simple classification visant à minimiser les distances intra-classes et maximiser les distances inter-classes. Il suffit donc d'appliquer un programme de classification pour obtenir une régionalisation de notre espace. On peut utiliser ici la procédure `hclust` de R-base
+
+```{r}
+reg<-hclust(Dij)
+plot(reg,hang = -1,
+     main = "Classification / Régionalisation",
+     xlab = "Positions",
+     ylab = "Distance normalisée")
+```
+
+On peut encore plus simplement utiliser la procédure `kmeans` de R-base
+mais en fixant le nombre de classes
+
+```{r}
+clus<-kmeans(x = as.matrix(Dij),centers = 3)
+par(mfrow=c(1,1))
+plot(X, rep(0,n), 
+     pch=20, 
+     xlab = NA,
+     ylab = NA,
+     xlim = c(-180, 180),
+     ylim =c (-100,100),
+     main = "Le monde est un segment...")
+segments(-180,0,180,0, col="gray",lwd=2)
+segments(-180,5,-180,-5, col="gray",lwd=2)
+segments(180,5,180,-5, col="gray",lwd=2)
+points(X, rep(0,n), 
+     pch=20, 
+     cex = 2, 
+     col=clus$cluster)
+text(X, rep(0,n),
+     row.names(coo), 
+     pos=3, 
+     cex=1,
+     col=clus$cluster)
+
+```
+
+### Trajectoires
+
+Plutôt que de fixer a priori le nombre de régions, on peut également raisonner sur la distribution des densités de points en fonction d'une fonction décroissante de la distance, ce qui permettra de repérer des pics de forte densité ("coeurs" des régions) et des bassins de faible densité ("marges" des régions).
+
+Supposons par exemple que nous appliquions un voisinage gaussien de portée $\mu$ c'est à dire
+
+$f(D_{ij}) = exp(- \alpha  D_{ij}^2)$ avec $\alpha = ln(0.5)/\mu^2$
+
+```{r}
+w<- seq(from = -180, to = 180, by=1)
+x <-coo$X
+wx<-c(w,x)
+d<-dist(wx, upper = T, diag=0)
+md<-as.matrix(d)
+md<-md[1:361,362:373]
+
+mu = 20
+alpha = log(0.5)/(mu**2)
+f <- function(D) {exp(alpha*(D**2))}
+m<-apply(f(md),1,sum)/12
+m <- m/mean(m)
+m20<-m
+
+mu = 40
+alpha = log(0.5)/(mu**2)
+f <- function(D) {exp(alpha*(D**2))}
+m<-apply(f(md),1,sum)/12
+m <- m/mean(m)
+m40<-m
+
+mu = 80
+alpha = log(0.5)/(mu**2)
+f <- function(D) {exp(alpha*(D**2))}
+m<-apply(f(md),1,sum)/12
+m <- m/mean(m) 
+
+m80<-m
+
+plot(w,m20, type="l", col="blue", 
+     main = "Gaussian density (mu = 20, 40, 80)",
+     ylab = "Average density",
+     xlab  = "Position")
+lines(w,m40, type="l", col="orange")
+lines(w,m80, type="l", col="red")
+abline(h=1, lty=2)
+points(coo$X, rep(0.0,12),pch=20,col="black" )
+
+```
+
+On peut alors voir comment le nombre de pics de densité diminue lorsque la portée de la fonction de voisinage augmente et comment on passe de 4 pics ($\mu = 20$) à trois pics ($\mu = 40$) et finalement un seul ($\mu = 80$).
+
+Ce résultat très important montre que l'on peut construire un **continuum de régionalisations** en faisant varier le paramètre $\mu$ pour une certraine famille de fonction de la distance et en examinant l'évolution de la distribution des pics et des creux d'accessibilité.
+
+## A.2 Le monde est un cercle ...
+
+Imaginons maintenant que le monde se réduit à une cercle autour d'une planète, comme dans le cas des anneaux de Saturne
+
+![](img/saturne.jpg)
+
+### Données
+
+On tire au hasard 12 positions angulaires sur le cercle dans le sens trigonométrique $\theta_1 ...\theta_{12}$ qui corresponde aux longitudes sur cette planète
+
+```{r}
+theta <-   c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
+coo<-data.frame(theta)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo, caprion = "Coordonnées de latitude et longitude")
+```
+
+Il s'agit apparemment de la même situation que précédemment (les valeurs de position angulaire $\theta$ mesurées en degrés correspondent aux valeurs précédentes de X) mais la géométrie n'est plus la même ce qui change fondamentalement le calcul de distances.
+
+### Visualisation
+
+Si l'on veut visualiser les points dans un espace à deux dimensions on peut les projeter, à la manière d'une carte du monde en projection polaire dont la longitude serait notre variable $\theta$ et la latitude une constante égale à zéro correspondant à l'équateur. Si par exemple notre monde est une planète de rayon $R$ = 1000 km, on aura 
+
+$x_i = R \times cos(\theta_i)$
+
+$y_i = R \times sin(\theta_i)$
+
+```{r}
+x<-cos(pi*coo$theta/180)*1000
+y<-sin(pi*coo$theta/180)*1000
+coo2<-data.frame(x,y)
+row.names(coo2)<-row.names(coo)
+kable(coo2, caption = "Coordonnées en projection polaire (R = 1000 km)")
+
+
+```
+
+
+Mais en réalité il est inutile d'introduire une projection dans un espace à deux dimensions si l'on supposer que les relations ne peuvent se faire qu'en circulant le long du cercle. La visualisation correcte de ce monde n'a donc pas besoin d'une échelle de distance mais plutôt d'une échelle angulaire. 
+
+```{r}
+
+par(mar = c(0,0,3,0))
+plot(coo2 ,  
+     asp=1,
+     ylim= c(-1000, 1000),
+     xlim = c(-1000,1000),
+     axes = F,
+     xlab=NA,
+     ylab=NA,
+      pch=20,
+     col="red",
+     cex=0,
+     main = "Le monde est un cercle ...")
+
+z<-seq(-pi, pi+0.1, 0.1)
+zx<-cos(z)*1000
+zy<-sin(z)*1000
+lines(cbind(zx,zy),col="gray",lwd=2)
+
+points(coo2 ,  
+      pch=20,
+       col="red",
+       cex=2)
+
+
+text(coo2,
+     row.names(coo2),
+     pos=3,
+     cex=1,
+     col="black")
+
+
+```
+
+### Distances
+
+Dans notre monde circulaire, il n'est pas possible de se déplacer en ligne droite. Les distances correspondent donc aux trajets effectués surun arc de cercle ce qui donne une valeur maximale égale à $\pi \times R$ avec $R$ égal au rayon du cercle. On normalise par la distance maximale qui est égale à $\pi R$ soit 3141.5 km dans notre exemple. 
+
+::: {.callout-note title="Le package circular" collapse="true"}
+Le calcul des distances angulaires est très facile avec le package [circular](https://www.rdocumentation.org/packages/circular/versions/0.5-1).
+
+Celui-ci comporte par ailleurs de très nombreuses fonctions d'analyse statistique appliqués à cette géométrie particulière du cercle @lund2004, @jammalamadaka2001
+:::
+
+```{r}
+library(circular)
+C<-circular(theta, type="angles",units="degrees")
+  D<-dist.circular(C,diag = T, upper=T,method ="geodesic")
+  D<-D/pi
+  MD<-as.matrix(D)
+  row.names(MD)<-row.names(coo)
+  colnames(MD)<-row.names(coo)
+kable(as.matrix(MD), caption = "Distance circulaire normalisée", digits=2)
+```
+
+La distance maximale est alors observée entre des points situés à l'opposé l'un de l'autre sur le cercle comme A et D. Mais en revanche les points qui étaient auparavant très éloignés dans le monde du segment comme A et L sont désormais très proches dans le monde du cercle puisque celui-ci se referme à leur niveau.
+
+### Partition
+
+Dans notre monde circulaire, la classification est très différente de celle observée dans le monde du segment alors même que les valeurs numériques sont au départ les mêmes. C'est la projection qui diffère.
+
+```{r}
+
+
+reg<-hclust(D)
+plot(reg,hang = -1,
+     main = "Classification / Régionalisation",
+     xlab = "Positions",
+     ylab = "Distance normalisée")
+```
+
+On va utilise la procédure `kmeans` de R-base en fixant le nombre de classes à trois comme précédemment
+
+```{r}
+clus<-kmeans(x = D,centers = 3)
+z<-seq(-pi, pi+0.1, 0.1)
+zx<-cos(z)*1000
+zy<-sin(z)*1000
+
+par(mar = c(0,0,3,0))
+plot(coo2 ,  
+     asp=1,
+     ylim= c(-1000, 1000),
+     xlim = c(-1000,1000),
+     axes = F,
+     xlab=NA,
+     ylab=NA,
+      pch=20,
+     col="red",
+     cex=0,
+     main = "Le monde est un cercle ...")
+
+
+lines(cbind(zx,zy),col="gray",lwd=2)
+
+points(coo2 ,  
+      pch=20,
+       col=clus$cluster,
+       cex=2)
+
+text(coo2,
+     row.names(coo2),
+     pos=3,
+     cex=1,
+     col=clus$cluster)
+
+```
+
+### Trajectoires
+
+Comme dans le cas du monde linéaire, on peut tracer des courbes de densité paramétriques pour repérer les coeurs et les marges de notre espace. On utilise ici la méthode de lissage par kernel paramétrique (vonmises) du package `circular`avec des paramètres kappa de valeur 9 , 18 et 36.
+
+```{r}
+res9 <- density(C, bw=10, control.circular=list(units="degrees"))
+res18 <- density(C, bw=20, control.circular=list(units="degrees"))
+res36 <- density(C, bw=40, adjust=2, control.circular=list(units="degrees"))
+par(mar=c(0,0,3,0))
+plot(C,xlim = c(-1.1,1.1),ylim=c(-1.1,1.1),
+     main = "Kernel density (kappa = 9, 18, 36)")
+lines(res9, offset=0.85, col="red")
+lines(res18, offset=0.85, col="orange")
+lines(res36, offset=0.85, col="blue")
+
+```
+
+Contrairement à l'example précédent où la partition en trois régions
+était la plus récurrente, c'est ici la partition en deux groupes qui
+ressort avec juste un point isolé à la frontière entre les deux
+principales classes.
+
+
+# B. MONDES BIDIMENSIONNELS
+
+## B.1 Le monde est un disque
+
+![](img/discworld.jpg)
+
+L'idée que le Monde soit un disque est une idée ancienne et même si la science a fini par l'infirmer elle demeure sans nul doute présente dans beaucoup de représentations contemporaines, propagées notamment par les théories du complot sur Youtube [@mohammed2019]. Il semble aussi que la conception d'une Terre plate soit une étape dans le dévloppement cognitif des enfants [@vaiopoulou2018]. Enfin, beaucoup de romans, notamment de science fiction ont utiliséce modèle pour construire des univers imaginaires, le plus célèbre étant sans doute celui des *Annales du Disque Monde* et la création annexe par l'auteur d'une série d'ouvrages portant sur la *Science of Discworld* [@stewart2011] .
+
+> "*The Disc, as it’s referred to in the novel, is quite literally a disc. The flat planet is carefully balanced on the backs of four elephants – Berilia, Tubul, Great T’Phon, and Jerakeen – who in turn stand on the Star Turtle, the Great A’Tuin, as it swims through space. [...]  Since the Disc is flat, there are no cardinal directions. Instead, the four directions are Hubwards (towards the Hub), Rimwards (towards the Rim), Turnwise (the direction that the Disc rotates in), and Widdershins (opposite to Turnwise). This leads to an endless onslaught of puns and geographical jokes. At the end of the book we discover the Circumfence, the rope fence that lines the edge of the Disc to help ensure no one falls off. There’s also the beauty of the Counterweight Continent – a land fabled to be made out of pure gold that exists to keep the Disc from tipping over. Everything we learn about the geography of Discworld is strangely cohesive while being entirely silly.* "
+Source : [Fernandez W., The Color of Magic, Consulté le 21/11/2024](https://wendyfernandez.net/2022/06/14/the-color-of-magic-an-introduction-to-sir-terry-pratchetts-discworld/)
+
+Dans la perspective d'abstraction qui est la nôtre, un monde fini en forme de disque constitue un cas particulièrement intéressant puisque les positions peuvent y être mesurées par un jeu de coordonnées à la fois métrique et angulaire, ce qui revient en pratique à combiner les deux mondes vus précédemment : segment et cercle. 
+
+### Données
+
+On tire au hasard 12 positions angulaires  $\theta_1 ...\theta_{12}$ à l'intérieur de ce Monde auxquelles on ajoute 12 coordonnées de rayon $\rho_1 ...\rho_{12}$ qui mesurent la distance au centre. On fixe la distance maximale au centre à 1
+
+```{r}
+n=12
+theta <- c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
+rho <- c(0.8,0.2,0.9,0.8, 0.2, 0.3, 0.5,0.6,0.5, 0.1,0.9,0.8)
+coo<-data.frame(theta,rho)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo)
+```
+
+### Visualisation
+
+On peut propooser une visualisation planaire en projetant les coordonnées dans un espace euclidien à l'aide des formules de transformation des coordonnées polaires précédentes : 
+
+$x_i = \rho_i \times cos(\theta_i)$
+
+$y_i = \rho_i \times sin(\theta_i)$
+
+```{r}
+coo$Xi<-coo$rho*cos(pi*coo$theta/180)
+coo$Yi<-coo$rho*sin(pi*coo$theta/180)
+z<-seq(-pi, pi+0.1, 0.1)
+zx<-cos(z)
+zy<-sin(z)
+
+par(mar = c(0,0,3,0))
+plot(coo$Xi,coo$Yi,   
+     asp=1,
+     ylim= c(-1, 1),
+     xlim = c(-1,1),
+     axes = F,
+     xlab=NA,
+     ylab=NA,
+     
+     main = "Le monde est un disque ...")
+polygon(cbind(zx,zy),col="lightyellow")
+points(coo$Xi, coo$Yi,
+     pch=20,
+     col="red",
+     cex=2)
+text(coo$Xi, coo$Yi,
+     row.names(coo),
+     pos=3,
+     cex=0.8,
+     col="black")
+points(0,0, pch=3)
+
+
+```
+
+Mais en réalité, la propriété fondamentale d'un monde de ce type est qu'il n'existe pas de direction privilégiée de type "Nord", "Sud", "Est" ou "Ouest". Il y a en revanche un centre et une périphérie (définis par la position sur la coordonnée sur $\rho$) et une direction de rotation qui suit le sens trignométrique (valeurs croissantes de $\theta$) ou le sens des aiguilles d'une montre (valeurs décroissantes de $\theta$)
+
+
+
+## B.2 Le monde est un rectangle
+
+
+## B.3 Le monde est un triangle 
+
+
+# C. MONDES TRIDIMENSIONNELS
+
+## C.1 Le monde est un donuts
+
+## C.2 Le monde est une sphère
+
+## C.3 Le monde est une boule
+
+# D. MONDES RETICULAIRES
+
+## D.1 Le monde est un graphe planaire
+
+## D.1 Le monde est un graphe non planaire
+
+# ANNEXES
+
+## Bibliographie
