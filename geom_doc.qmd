@@ -38,15 +38,46 @@ library(FactoMineR)
 library(circular)
 ```
 
-Commençons pas examiner le rôle de la géométrie dans la production d'une régionalisation. On suppose ici que le Monde se réduit à un ensemble de points et l'on cherche donc juste à regrouper les points les plus proches en régions. Le critère de régionalisation sera donc l'accessibilité ce qui reviendra à former des ensembles de points tels
-que :
+# INTRODUCTION
 
--   les points situés dans une même région soient le plus proche
-    possibles
--   les points situés dans deux régions soient le plus éloignés
-    possibles
+## Objectif
 
-Il faut donc définir une mesure de proximité $D_{ij}$ entre les points puis choisir un critère à optimiser $H(D,R)$ qui dépendra de la distance entre les points et de leur affectation à l'une des régions.
+Nous souhaitons montrer comment le choix d'une **géométrie** va influencer la perception des proximités entre des individus qui occupent des positions à l'intérieur d'un espace. Après avoir défini des distances entre les individus dans une géométrie, nous chercherons à définir des **régions** regroupant les individus de façon à maximiser un critère d'accessibilité défini comme suit 
+
+-   les individus situés dans une même région doivent être le plus proche possibles
+-   les individus  situés dans deux régions différentes doivent être le plus éloignés possibles
+
+Il faudra donc définir une mesure de proximité $D_{ij}$ entre les positions occupées par les individus puis choisir un critère à optimiser $H(D,R)$. Mais on pourra également travailler sur l'ensemble des positions possibles (qu'elles soient ou non occupées par un individu) et définir une partition de l'ensemble de l'espace en fonction de la proximité des positions inoccupées avec les groupes d'indvidus établis au cours de la première étape de l'analyse.
+
+## Dispositif expérimental
+
+On suppose que le monde est décrit par une ou plusieurs **dimensions** $D_1, D_2, D_3, ...D_k$ qui définissent des **positions** pouvant être occupées par des **individus** $i_1, ...i_n$ qui forment une **population**.
+
+On suppose que chaque dimension comporte isolément 100 positions possibles que l'on peut noter de  de 1 à 100. Lorsque l'on croise deux dimensions le nombre de position est multiplié et non pas additionné. Un espace à 2 dimensions offrira donc 10 000 positions et  un espace à 3 dimensions 1 million de positions.
+
+Nous nous limiterons dans notre analyse au cas des espaces à une ou deux dimensions et nous partirons systématiquement d'un même tableau de données composé de 12 individus et décrits par le tableau suivant :
+
+```{r}
+D1 <- c( 1, 17, 22, 26, 48, 52, 56, 58, 72, 76, 78, 99)
+D2 <- c(48, 90,  6, 70, 31, 54, 67, 50, 18, 86, 39, 16)
+code <-c("A","B","C","D","E","F","G","H","I","J","K","L")
+
+pos<-data.frame(code,D1,D2)
+
+kable(pos)
+
+```
+
+- La position D1 a été réalisée en effectuant un tirage uniforme aléatoire de 4 points entre 1 et 30, 4 points entre 41 et 60 et 4 points entre  71 et 100. Elle a donc exclu les positions $[31;40]$ et $[61 ; 70]$ du tirage au sort.
+
+- La position D2 a été en revanche construite par un tirage aléatoire uniforme sur l'ensemble de l'intervalle $[1;100]$
+
+
+
+
+
+
+
 
 # A. MONDES UNIDIMENSIONNELS
 
@@ -58,11 +89,11 @@ Imaginons que le monde se réduise à une ligne comme la future ville de Neom en
 
 ### Données
 
-On tire au hasard 12 positions $X_1 ...X_{12}$à l'intérieur de ce Monde en imposant comme seule contrainte que deux individus ne peuvent pas occuper la même position. Cela signifie qu'il existe une distance minimale entre deux individus qu'on fixera par exemple à 1.
+On ne considère que la dimension D1 et on définit un segment de longueur 100 sur lequel se distribuent les 12 individus
 
 ```{r}
 n=12
-X <- c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
+X <- D1
 coo<-data.frame(X)
 row.names(coo)<-c("A","B","C","D","E","F",
                 "G","H","I","J","K","L")
@@ -79,12 +110,13 @@ plot(X, rep(0,n),
      pch=20, 
      xlab = NA,
      ylab = NA,
-     xlim = c(-180, 180),
+     xlim = c(0,100),
      ylim =c (-100,100),
+     axes = F,
      main = "Le monde est un segment...")
-segments(-180,0,180,0, col="gray",lwd=2)
-segments(-180,5,-180,-5, col="gray",lwd=2)
-segments(180,5,180,-5, col="gray",lwd=2)
+segments(0,0,100,0, col="gray",lwd=2)
+segments(0,-1,0,1, col="gray",lwd=2)
+segments(100,-1,100,1, col="gray",lwd=2)
 points(X, rep(0,n), 
      pch=20, 
      cex = 2, 
@@ -103,11 +135,11 @@ Comme notre monde est *fini* on peut normaliser la distance sur l'intervalle $[0
 
 $D_{ij}^{norm} = |X_i - X_j|/ D_{max}$
 
-Le maximum possible étant pour nous égal ici à $D_{max} = 360$, la matrice de distance se calcule sans difficultés avec la fonction `dist()`de R-base :
+Le maximum possible étant pour nous égal ici à $D_{max} = 100$, la matrice de distance se calcule sans difficultés avec la fonction `dist()`de R-base :
 
 ```{r, echo=T}
 Dij = dist(coo,diag = T, upper = T,method = "euclidean")
-Dij = Dij/360
+Dij = Dij/100
 kable(as.matrix(Dij),
       caption = "Matrice de distance normalisée",
       digits=2)
@@ -125,49 +157,66 @@ plot(reg,hang = -1,
      ylab = "Distance normalisée")
 ```
 
-On peut encore plus simplement utiliser la procédure `kmeans` de R-base
-mais en fixant le nombre de classes
+On décide par exemple de faire 3 classes et l'on retrouve sans surprise les groupes qui avaient été favorisés dans le tirage des valeurs de la dimension D1. 
 
 ```{r}
-clus<-kmeans(x = as.matrix(Dij),centers = 3)
+clus<-cutree(reg,k = 3)
 par(mfrow=c(1,1))
 plot(X, rep(0,n), 
      pch=20, 
      xlab = NA,
      ylab = NA,
-     xlim = c(-180, 180),
+     xlim = c(0,100),
      ylim =c (-100,100),
-     main = "Le monde est un segment...")
-segments(-180,0,180,0, col="gray",lwd=2)
-segments(-180,5,-180,-5, col="gray",lwd=2)
-segments(180,5,180,-5, col="gray",lwd=2)
+     axes = F,
+     main = "Répartition des trois classes")
+segments(0,0,100,0, col="gray",lwd=2)
+segments(0,-1,0,1, col="gray",lwd=2)
+segments(100,-1,100,1, col="gray",lwd=2)
 points(X, rep(0,n), 
      pch=20, 
      cex = 2, 
-     col=clus$cluster)
+     col=clus)
 text(X, rep(0,n),
      row.names(coo), 
      pos=3, 
      cex=1,
-     col=clus$cluster)
+     col=clus)
 
 ```
 
-### Trajectoires
 
-Plutôt que de fixer a priori le nombre de régions, on peut également raisonner sur la distribution des densités de points en fonction d'une fonction décroissante de la distance, ce qui permettra de repérer des pics de forte densité ("coeurs" des régions) et des bassins de faible densité ("marges" des régions).
+### Densités
+
+Plutôt que de fixer a priori le nombre de régions, on pourrait également raisonner sur la distribution des densités de points en fonction d'une fonction décroissante de la distance, ce qui permettra de repérer des pics de forte densité ("coeurs" des régions) et des bassins de faible densité ("marges" des régions).
 
 Supposons par exemple que nous appliquions un voisinage gaussien de portée $\mu$ c'est à dire
 
 $f(D_{ij}) = exp(- \alpha  D_{ij}^2)$ avec $\alpha = ln(0.5)/\mu^2$
 
 ```{r}
-w<- seq(from = -180, to = 180, by=1)
+w<- seq(from = 1, to = 100, by=1)
 x <-coo$X
 wx<-c(w,x)
 d<-dist(wx, upper = T, diag=0)
 md<-as.matrix(d)
-md<-md[1:361,362:373]
+md<-md[1:100,101:112]
+
+mu = 5
+alpha = log(0.5)/(mu**2)
+f <- function(D) {exp(alpha*(D**2))}
+m<-apply(f(md),1,sum)/12
+m <- m/mean(m) 
+m5<-m
+
+
+
+mu = 10
+alpha = log(0.5)/(mu**2)
+f <- function(D) {exp(alpha*(D**2))}
+m<-apply(f(md),1,sum)/12
+m <- m/mean(m)
+m10<-m
 
 mu = 20
 alpha = log(0.5)/(mu**2)
@@ -176,33 +225,20 @@ m<-apply(f(md),1,sum)/12
 m <- m/mean(m)
 m20<-m
 
-mu = 40
-alpha = log(0.5)/(mu**2)
-f <- function(D) {exp(alpha*(D**2))}
-m<-apply(f(md),1,sum)/12
-m <- m/mean(m)
-m40<-m
 
-mu = 80
-alpha = log(0.5)/(mu**2)
-f <- function(D) {exp(alpha*(D**2))}
-m<-apply(f(md),1,sum)/12
-m <- m/mean(m) 
 
-m80<-m
-
-plot(w,m20, type="l", col="blue", 
-     main = "Gaussian density (mu = 20, 40, 80)",
+plot(w,m5, type="l", col="blue", 
+     main = "Gaussian density (mu = 5, 10, 20)",
      ylab = "Average density",
      xlab  = "Position")
-lines(w,m40, type="l", col="orange")
-lines(w,m80, type="l", col="red")
+lines(w,m10, type="l", col="orange")
+lines(w,m20, type="l", col="red")
 abline(h=1, lty=2)
 points(coo$X, rep(0.0,12),pch=20,col="black" )
 
 ```
 
-On peut alors voir comment le nombre de pics de densité diminue lorsque la portée de la fonction de voisinage augmente et comment on passe de 4 pics ($\mu = 20$) à trois pics ($\mu = 40$) et finalement un seul ($\mu = 80$).
+On peut alors voir comment le nombre de pics de densité diminue lorsque la portée de la fonction de voisinage augmente et comment on passe de 5 pics ($\mu = 5$) à deux pics ($\mu = 10$) et finalement un seul ($\mu = 20$).
 
 Ce résultat très important montre que l'on peut construire un **continuum de régionalisations** en faisant varier le paramètre $\mu$ pour une certraine famille de fonction de la distance et en examinant l'évolution de la distribution des pics et des creux d'accessibilité.
 
@@ -214,14 +250,14 @@ Imaginons maintenant que le monde se réduit à une cercle autour d'une planète
 
 ### Données
 
-On tire au hasard 12 positions angulaires sur le cercle dans le sens trigonométrique $\theta_1 ...\theta_{12}$ qui corresponde aux longitudes sur cette planète
+On transfrome les coordonnées de $D_1$ en positions angulaires sur le cercle dans le sens trigonométrique $\theta_1 ...\theta_{12}$ qui corresponde aux longitudes sur cette planète
 
 ```{r}
-theta <- c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
+theta <- D1*360/100
 coo<-data.frame(theta)
 row.names(coo)<-c("A","B","C","D","E","F",
                 "G","H","I","J","K","L")
-kable(coo, caprion = "Coordonnées de latitude et longitude")
+kable(coo, caprion = "Coordonnées angulaires en degré")
 ```
 
 Il s'agit apparemment de la même situation que précédemment (les valeurs de position angulaire $\theta$ mesurées en degrés correspondent aux valeurs précédentes de X) mais la géométrie n'est plus la même ce qui change fondamentalement le calcul de distances.
@@ -252,8 +288,8 @@ Mais en réalité il est inutile d'introduire une projection dans un espace à d
 par(mar = c(0,0,3,0))
 plot(coo2 ,  
      asp=1,
-     ylim= c(-1000, 1000),
-     xlim = c(-1000,1000),
+     ylim= c(-1050, 1050),
+     xlim = c(-1050,1050),
      axes = F,
      xlab=NA,
      ylab=NA,
@@ -282,6 +318,9 @@ text(coo2,
 
 ```
 
+Le changement de géométrie entraîne un rapprochement spectaculaire des points $A$ et $L$ qui étaient auparavant les deux points les plus éloignés dans le monde linéaire.
+
+
 ### Distances
 
 Dans notre monde circulaire, il n'est pas possible de se déplacer en ligne droite. Les distances correspondent donc aux trajets effectués surun arc de cercle ce qui donne une valeur maximale égale à $\pi \times R$ avec $R$ égal au rayon du cercle. On normalise par la distance maximale qui est égale à $\pi R$ soit 3141.5 km dans notre exemple. 
@@ -294,7 +333,7 @@ Celui-ci comporte par ailleurs de très nombreuses fonctions d'analyse statistiq
 
 ```{r}
 library(circular)
-C<-circular(theta, type="angles",units="degrees")
+C<-circular(theta, type="angles",units="degrees",names = row.names(coo))
   D<-dist.circular(C,diag = T, upper=T,method ="geodesic")
   D<-D/pi
   MD<-as.matrix(D)
@@ -319,10 +358,10 @@ plot(reg,hang = -1,
      ylab = "Distance normalisée")
 ```
 
-On va utilise la procédure `kmeans` de R-base en fixant le nombre de classes à trois comme précédemment
+On va retenir ici 4 classes
 
 ```{r}
-clus<-kmeans(x = D,centers = 3)
+clus<-cutree(reg,k = 4)
 z<-seq(-pi, pi+0.1, 0.1)
 zx<-cos(z)*1000
 zy<-sin(z)*1000
@@ -330,8 +369,8 @@ zy<-sin(z)*1000
 par(mar = c(0,0,3,0))
 plot(coo2 ,  
      asp=1,
-     ylim= c(-1000, 1000),
-     xlim = c(-1000,1000),
+     ylim= c(-1050, 1050),
+     xlim = c(-1050,1050),
      axes = F,
      xlab=NA,
      ylab=NA,
@@ -345,18 +384,18 @@ lines(cbind(zx,zy),col="gray",lwd=2)
 
 points(coo2 ,  
       pch=20,
-       col=clus$cluster,
+       col=clus,
        cex=2)
 
 text(coo2,
      row.names(coo2),
      pos=3,
      cex=1,
-     col=clus$cluster)
+     col=clus)
 
 ```
 
-### Trajectoires
+### Densités
 
 Comme dans le cas du monde linéaire, on peut tracer des courbes de densité paramétriques pour repérer les coeurs et les marges de notre espace. On utilise ici la méthode de lissage par kernel paramétrique (vonmises) du package `circular`avec des paramètres kappa de valeur 9 , 18 et 36.
 
@@ -373,15 +412,72 @@ lines(res36, offset=0.85, col="blue")
 
 ```
 
-Contrairement à l'example précédent où la partition en trois régions
-était la plus récurrente, c'est ici la partition en deux groupes qui
-ressort avec juste un point isolé à la frontière entre les deux
-principales classes.
+On retouve la même méthode de calcul des densités que dans le monde linéaire, mais appliqué aux coordonnées angulaires. Mais avec une différence importante qui est ici la permanence de l'existence de 4 pics de densité aux différentes échelles de généralisation. 
 
 
 # B. MONDES BIDIMENSIONNELS
 
-## B.1 Le monde est un disque
+## B.1 Le monde est un échiquier
+
+![](img/chessboard.jpg)
+
+L'image la plus simple qui vienne à l'esprit lorsque l'on évoque un monde **fini** à deux dimensions est celle d'un échuiquier ou d'un damier. Comme nous avons introduit l'hypothèse que chaque individu occupait une position et que deux individus ne pouvaient pas occuper la même position, on peut définit des **cases** ou **carreaux** correspondant aux différentes positions autorisées. Le faite que ces carreaux soient de forme carrée n'est évidemment pas obligatoire (on aurait pu choisir des triangles ou des hexagone pour produire un pavage de l'espace) mais cela est suffisant dans un premier temps pour formuler quelques hypothèses sur les distances à l'intérieur de ce monde et cela permet de retrouver un certain nombre de métriques théoriques (euclidienne, Manhattan, Chebyshev, ...) pour définir les distances entre les individus.
+
+### Données
+
+On reprend telle quelle les données de position des dimensions D1 et D2 en soustrayant juste la valeur de 0.5 pour placer nos individus au centre des cases d'un échiquier formant un carré de dimension 100 x 100 avec un reprère orthonormé placé au point (0,0). 
+
+```{r}
+n=12
+X <- D1-0.5
+Y <- D2-0.5
+coo<-data.frame(X,Y)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo)
+```
+
+
+### Visualisation
+
+La visualisation est immédiate et facile, tous les logiciels de cartographie ou de statistique étant habitué à cette géométrie
+
+```{r}
+
+par(mar = c(3,3,3,3))
+plot(coo ,  
+     asp=1,
+     ylim= c(0, 100),
+     xlim = c(0,100),
+     axes=T,
+     xlab=T,
+     ylab=T,
+     cex=0,
+     main = "Le monde est un échiquier ...")
+
+polygon(x=c(0,100,100,0), y=c(0,0,100,100),col="lightyellow")
+
+
+points(coo , 
+      pch=15,
+       col="red",
+       cex=0.9)
+
+
+text(coo,
+     row.names(coo),
+     pos=3,
+     cex=1,
+     col="black")
+
+
+```
+
+
+
+
+
+## B.2 Le monde est un disque
 
 ![](img/discworld.jpg)
 
@@ -394,12 +490,12 @@ Dans la perspective d'abstraction qui est la nôtre, un monde fini en forme de d
 
 ### Données
 
-On tire au hasard 12 positions angulaires  $\theta_1 ...\theta_{12}$ à l'intérieur de ce Monde auxquelles on ajoute 12 coordonnées de rayon $\rho_1 ...\rho_{12}$ qui mesurent la distance au centre. On fixe la distance maximale au centre à 1
+On reprend les positions angulaires $\theta_1 ...\theta_{12}$ issues de la variable D1 et on ajoute 12 coordonnées de rayon $\rho_1 ...\rho_{12}$ qui mesurent la distance au centre. On fixe la distance maximale au centre à 1
 
 ```{r}
 n=12
-theta <- c(-170,-150, -140, -80, -30, 0, 10,30,45, 150, 165,175 )
-rho <- c(0.8,0.2,0.9,0.8, 0.2, 0.3, 0.5,0.6,0.5, 0.1,0.9,0.8)
+theta <- D1 *360/100
+rho <- D2/100
 coo<-data.frame(theta,rho)
 row.names(coo)<-c("A","B","C","D","E","F",
                 "G","H","I","J","K","L")
@@ -581,29 +677,28 @@ for(i in 1:12){
 row.names(Dcirc)<-row.names(coo)
 colnames(Dcirc)<-row.names(coo)
 
-kable(Dcirc/2, caption = "Distance périphérique", digits=2)
+kable(Dcirc/2, caption = "Distance circumradiale", digits=2)
 
 ```
 
 
 ### Partition
 
-
-
 ```{r}
 
 par(mfrow=c(1,1))
 reg<-hclust(D)
 plot(reg,hang = -1,
-     main = "Classification en distance radiale",
+     labels = row.names(coo),
+     main = "Classification en distance circumradiale",
      xlab = "Positions",
-     ylab = "Distance radiale normalisée")
+     ylab = "Distance circum radiale normalisée")
 ```
 
-On va utilise la procédure `kmeans` de R-base en fixant le nombre de classes à trois comme précédemment
+L'arbre nous suggère 4 classes que l'on peut visualiser ainsi
 
 ```{r}
-clus<-kmeans(x = D,centers = 3)
+clus<-cutree(reg,k=4)
 
 z<-seq(-pi, pi+0.1, 0.1)
 zx<-cos(z)
@@ -622,35 +717,39 @@ plot(coo$Xi,coo$Yi,
 polygon(cbind(zx,zy),col="lightyellow")
 points(coo$Xi, coo$Yi,
      pch=20,
-     col=clus$cluster,
+     col=clus,
      cex=2)
 text(coo$Xi, coo$Yi,
      row.names(coo),
      pos=3,
      cex=0.8,
-     col=clus$cluste)
+     col=clus)
 points(0,0, pch=3)
 
 ```
 
-### Trajectoires
+L'image obtenu est de prime abord assez perturbante puisque des points qui nous semblent proches (en distance euclidienne) se retouvent en fait séparés dans des classes différentes et des points apparemment éloignés sont regroupés. La difficulté vient du fait que notre oeil regroupe de façon euclidienne alors que la distance qui est ici à l'oeuvre (circumradiale) opère différemment. Elle conduit en particulier à rapprocher les points localisés dans un même secteur angulaire c'est-à-dire ayant des valeurs proches de $\theta$.
+
+### Densité
+
+Le calcul des densités avec cette géométrie pour différentes portées de lissage est assez complexe ,
 
 
-## B.2 Le monde est un rectangle
+
+
+
+
+
 
 
 ## B.3 Le monde est un triangle 
 
+## B.4 Le monde est un donuts
 
-# C. MONDES TRIDIMENSIONNELS
+## B.5 Le monde est une sphère
 
-## C.1 Le monde est un donuts
 
-## C.2 Le monde est une sphère
-
-## C.3 Le monde est une boule
-
-# D. MONDES RETICULAIRES
+# C. MONDES RETICULAIRES
 
 ## D.1 Le monde est un graphe planaire
 
