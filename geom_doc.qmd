@@ -36,6 +36,12 @@ knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
 library(knitr)
 library(FactoMineR)
 library(circular)
+library(MASS)
+library(potential)
+library(mapsf)
+library(sf)
+library(Ternary)
+
 ```
 
 # INTRODUCTION
@@ -60,6 +66,8 @@ Nous nous limiterons dans notre analyse au cas des espaces à une ou deux dimens
 ```{r}
 D1 <- c( 1, 17, 22, 26, 48, 52, 56, 58, 72, 76, 78, 99)
 D2 <- c(48, 90,  6, 70, 31, 54, 67, 50, 18, 86, 39, 16)
+#D3 <- c(28, 78, 40, 87, 93,  5, 52, 88, 55, 45, 95, 45)
+
 code <-c("A","B","C","D","E","F","G","H","I","J","K","L")
 
 pos<-data.frame(code,D1,D2)
@@ -70,7 +78,7 @@ kable(pos)
 
 - La position D1 a été réalisée en effectuant un tirage uniforme aléatoire de 4 points entre 1 et 30, 4 points entre 41 et 60 et 4 points entre  71 et 100. Elle a donc exclu les positions $[31;40]$ et $[61 ; 70]$ du tirage au sort.
 
-- La position D2 a été en revanche construite par un tirage aléatoire uniforme sur l'ensemble de l'intervalle $[1;100]$
+- Les positions D2 a été en revanche construites par un tirage aléatoire uniforme sur l'ensemble de l'intervalle $[1;100]$
 
 
 
@@ -474,6 +482,208 @@ text(coo,
 ```
 
 
+### Distance
+
+Un grand nombre de métriques sont adaptées à cette géométrie. On peut notamment utiliser la famille des distances de Minkowski qui est uneformule générale de calcul des distance entre deux points dans l’espace dimensionnel n, applicable au cas de l'espace de dimension 2 qui nous intéresse ici. Elle est une généralisation des distances Euclidienne, de Manhattan et de Tchebychev. Dans un espace de dimension n, la distance de Minkowski de paramètre ${\lambda}$ s'écrira :
+
+$D^{Mink}(a,b) = \sqrt[\lambda]{\sum^n_{i=1}{(|a_i-b_i|)^\lambda})}$
+
+
+Le paramètre $\lambda$ est l’ordre de la métrique de Minkowski. Pour différentes valeurs de $\lambda$, la distance peut être calculée d'au moins  trois manières différentes :
+
+- $\lambda = 1$ : Distance de Manhattan (métrique $L^1$)
+
+- $\lambda = 2$ : Distance Euclidienne (métrique $L^2$)
+
+- $\lambda = \infty$ : Distance de Tchebychev (métrique $L^\infty$)
+
+
+Si l'on retient par exemple la distance euclidienne et si on normalise par la plus grande distance possible ($100\sqrt2$) qui correspond à la distance entre deux points opposés du carré on obtient la matrice de distance suivante :
+
+```{r}
+Dij = dist(coo,diag = T, upper = T,method = "euclidean")
+Dij = Dij/(100*sqrt(2))
+kable(as.matrix(Dij),
+      caption = "Matrice de distance normalisée",
+      digits=2)
+```
+
+
+### Partition
+
+On applique comme précédemment un programme de classification sur la matrice de distancepour obtenir une régionalisation de notre espace. 
+
+```{r}
+reg<-hclust(Dij)
+plot(reg,hang = -1,
+     main = "Classification / Régionalisation",
+     xlab = "Positions",
+     ylab = "Distance normalisée")
+```
+
+On décide par exemple de faire 4 classes :
+
+```{r}
+clus<-cutree(reg,k = 4)
+par(mar = c(3,3,3,3))
+plot(coo ,  
+     asp=1,
+     ylim= c(0, 100),
+     xlim = c(0,100),
+     axes=T,
+     xlab=T,
+     ylab=T,
+     cex=0,
+     main = "Le monde est un échiquier ...")
+
+polygon(x=c(0,100,100,0), y=c(0,0,100,100),col="lightyellow")
+
+
+points(coo , 
+      pch=15,
+       col=clus,
+       cex=0.9)
+
+
+text(coo,
+     row.names(coo),
+     pos=3,
+     cex=1,
+     col=clus)
+
+```
+
+
+### Densités
+
+
+Plusieurs méthodes sont possibles pour déterminer les trajectoires de regroupement des points en fonction d'une fonction d'interaction spatiale. Par exemple on peut utiliser comme dans le monde segmentaire la méthode des potentiels avec voisinages gaussiens de portées successives (5,10,15,20). On vot alors très bien comment le nombre de pics de potentiel (donc de densité) va progressivement diminuer pour passer de $n$ pics (nombre de positions occupées) pour
+se réduite à un pic unique.
+```{r}
+library(potential)
+library(mapsf)
+library(sf)
+
+# Delineate the world
+lim = matrix(c(0,0,100,0,100,100,0,100,0,0),ncol=2, byrow=TRUE)
+wld<-st_polygon(list(lim))
+
+
+# Create a grid
+gri <- create_grid(x = wld, res = 1)
+#points(y$geometry, cex=0.1)
+st_crs(gri) <-2154 # Arbitratry
+
+# Transform point in sf
+pop<-st_as_sf(coo, coords=c("X","Y"))
+#points(pop)
+st_crs(pop) <- 2154 # Arbitratry
+pop$wgt<-1
+
+# Compute distance between points and grid
+d <- create_matrix(x = pop, y = gri,checksize = F,longlat = F)
+
+# Compute potential
+
+gri$pot3 <- potential(x = pop, y = gri, d = d,
+                   var = "wgt", fun = "e",
+                   span = 5, beta = 2)
+
+gri$pot6 <- potential(x = pop, y = gri, d = d,
+                   var = "wgt", fun = "e",
+                   span = 10, beta = 2)
+
+gri$pot12 <- potential(x = pop, y = gri, d = d,
+                   var = "wgt", fun = "e",
+                   span = 15, beta = 2)
+
+gri$pot24 <- potential(x = pop, y = gri, d = d,
+                   var = "wgt", fun = "e",
+                   span = 20, beta = 2)
+bks<-c(0, 0.1,0.2,0.4,0.8,1.6,3.2,6.4)
+
+par(mfrow=c(2,2), mar=c(0,0,3,0))
+
+# span=6
+iso <- equipotential(x = gri, var = "pot3", breaks = bks)
+#par(mar=c(0,0,3,0))
+plot(coo, asp=1, xlab=NA,ylab=NA, axes=F, xlim=c(-1,101), ylim=c(-10,100), main = "k=5")
+mf_map(x = iso, var = "min", type = "choro", 
+       breaks = bks, 
+       pal = rev(hcl.colors(10, 'Teal')),
+       lwd = .2,
+       border = "#121725", 
+       leg_pos = "bottom",
+       leg_val_rnd = 1,
+       leg_horiz = T,
+       leg_size = 0.5,
+   #    leg_title = "Potential of\nPopulation",
+       add=T)
+points(coo,pch=20,col="black")
+text(coo,row.names(coo),pch=20,col="black", pos=3, cex=0.6)
+
+
+
+# span=6
+iso <- equipotential(x = gri, var = "pot6", breaks = bks)
+#par(mar=c(0,0,3,0))
+plot(coo, asp=1, xlab=NA,ylab=NA, axes=F, xlim=c(-1,101), ylim=c(-10,100), main = "k=10")
+mf_map(x = iso, var = "min", type = "choro", 
+       breaks = bks, 
+       pal = rev(hcl.colors(10, 'Teal')),
+       lwd = .2,
+       border = "#121725", 
+       leg_pos = "bottom",
+       leg_val_rnd = 1,
+       leg_horiz = T,
+       leg_size = 0.5,
+   #    leg_title = "Potential of\nPopulation",
+       add=T)
+points(coo,pch=20,col="black")
+text(coo,row.names(coo),pch=15,col="black", pos=3, cex=0.6)
+
+# span=12
+iso <- equipotential(x = gri, var = "pot12", breaks = bks)
+#par(mar=c(0,0,3,0))
+plot(coo, asp=1, xlab=NA,ylab=NA, axes=F, xlim=c(-1,101), ylim=c(-10,100), main = "k=15")
+mf_map(x = iso, var = "min", type = "choro", 
+       breaks = bks, 
+       pal = rev(hcl.colors(10, 'Teal')),
+       lwd = .2,
+       border = "#121725", 
+       leg_pos = "bottom",
+       leg_val_rnd = 1,
+       leg_horiz = T,
+       leg_size = 0.5,
+   #    leg_title = "Potential of\nPopulation",
+       add=T)
+points(coo,pch=20,col="black")
+text(coo,row.names(coo),pch=20,col="black", pos=3, cex=0.6)
+#mf_layout("k=6", frame=T, credits=NA, arrow=F, scale=F)
+
+# span=12
+iso <- equipotential(x = gri, var = "pot24", breaks = bks)
+#par(mar=c(0,0,3,0))
+plot(coo, asp=1, xlab=NA,ylab=NA, axes=F, xlim=c(-1,101), ylim=c(-10,100), main = "k=20")
+mf_map(x = iso, var = "min", type = "choro", 
+       breaks = bks, 
+       pal = rev(hcl.colors(10, 'Teal')),
+       lwd = .2,
+       border = "#121725", 
+       leg_pos = "bottom",
+       leg_val_rnd = 1,
+       leg_horiz = T,
+       leg_size = 0.5,
+   #    leg_title = "Potential of\nPopulation",
+       add=T)
+points(coo,pch=20,col="black")
+text(coo,row.names(coo),pch=20,col="black", pos=3, cex=0.6)
+#mf_layout("k=6", frame=T, credits=NA, arrow=F, scale=F)
+
+```
+
+
+
 
 
 
@@ -732,19 +942,98 @@ L'image obtenu est de prime abord assez perturbante puisque des points qui nous 
 
 ### Densité
 
-Le calcul des densités avec cette géométrie pour différentes portées de lissage est assez complexe ,
+Le calcul des densités avec cette géométrie pour différentes portées de lissage est assez complexe ...
 
-
-
-
-
-
-
-
+> A faire après des recherches biblio. plus poussées
 
 ## B.3 Le monde est un triangle 
 
-## B.4 Le monde est un donuts
+![[source](http://www.quartzpage.de/app_td.html)](img/ternary.jpg)
+
+Les diagrammes triangulaires aussi appelés ternaires (*ternary diagram*) correspondent à un cas particulier de monde bidimensionnel mais construit à partir de trois variables liées par une relation. qui fait que chacune des variables peut se déduire des deux autres. On posera plus précisément que la somme des trois composantes doit toujours être égale à 1 pour chacun des éléments de la population décrit par les rois composantes.
+
+$\forall i \in \{1,n\} \space \space   D_1(i) + D_2(i) + D_3(i) = 1$
+
+Ce type de diagramme a été par exemple utilisé en minéralogie pour décrire la composition de roches composées de trois types de minéraux. Ou bien en économie dans la théorie de Rostow pour décrire le passage d'une économie du secteur primaire au secteur secondaire et finalement tertiaire. 
+
+Dans une perspective plus abstraite, la géométrie ternaire est une variante intéressante du monde de l'échiqier qui possède certaines propriétés singulières. 
+
+### Données
+
+Pour construire un monde triangulaire, nous allons transformer nos trois dimensions initiales $D_1, D_2, D_3$ en coordonnées $x,y,z$ en appliquant les transformations suivantes : 
+
+$$
+\left\{
+    \begin{array}{lll}
+        x_i = \frac{D_1(i)}{D_1(i)+D_2(i)+D_3(i)}  \\
+        y_i = \frac{D_2(i)}{D_1(i)+D_2(i)+D_3(i)}  \\
+        z_i = \frac{D_3(i)}{D_1(i)+D_2(i)+D_3(i)}   
+    \end{array}
+\right.
+$$
+
+Mais on peut aussi considérer s'il n'y a que deux dimensions **finies** que la troisième coordonnée est la moyenne des complémentaire des deux précédentes, ce qui donne :
+
+$$
+\left\{
+    \begin{array}{lll}
+        \omega(i) = \frac{(max(D_1)-D_1(i)) + (max(D_2)-D_2(i))}{2}\\
+        x_i = \frac{D_1(i)}{D_1(i)+D_2(i)+\omega(i)}  \\
+        y_i = \frac{D_2(i)}{D_1(i)+D_2(i)+\omega(i)}  \\
+        z_i = \frac{D_3(i)}{D_1(i)+D_2(i)+\omega(i)}   
+    \end{array}
+\right.
+$$
+
+
+
+Dans notre exemple, les deux dimensions $D_1$ et $D_2$ ont chacune un maximum de 100 de sorte qu'on peut en déduire facilement une troisième coordonnée sans faire intervenir une dimension supplémentaire
+
+```{r}
+Omega <- (200-D1-D2)/2
+x = D1/(D1+D2+Omega)
+y = D2/(D1+D2+Omega)
+z = Omega/(D1+D2+Omega)
+coo<-data.frame(x,y,z)
+row.names(coo)<-code
+kable(coo, digits=2, caption = "Coordonnées triangulaires")
+```
+
+
+### Visualisation
+
+Compte-tenu des spécificités des liaisons entre les trois coordonnées (métrique oblilinéaire), il est préférable de faire appel à des packages spécialisés pour visualiser les points dans ce type de géométrie. 
+
+::: {.callout-note title="Visualisation de diagrammes ternaires dans R" collapse="true"}
+Il existe un grand nombre de packages dédiés à la visualisation de diagramme ternaires dans R, parmi lesquels on peut citer `ggtern`, `plotly`et `Ternary`. Le choix de l'un ou l'autre de ces packages dépend des objectifs poursuivis. Nous optons ici pour le package `Ternary`qui offre de nombreuses possibilités de visualisation mais aussi de traitement.
+
+- [ggtern](http://www.ggtern.com/d/2.2.0/) est une extension de `ggplot2` mise au point par Nicholas Hamilton et est donc bien adapté à des visualisations statiques pour les personnes habituées à la logique de ggplot2.
+- [plotly](https://plotly.com/r/ternary-plots/) permet grâce à son type d'objet `scatterternary`de construire des diagrammes ternaires dynamiques bien adaptés au web. Mais il comporte également des outils assez raffinés de délimitation de lignes ou de zones à l'intérieur de ces diagrammes.
+- [Ternary](https://cran.r-project.org/web/packages/Ternary/vignettes/Ternary.html) semble enfin le plus prometteur pour notre objectif car il offre non seulement des possibilités de visualisation mais aussi de traitement, notamment pour le calcul de densités et le tracé des isolignes associées. 
+
+Mais il en existe sans nul doute d'autres ...
+:::
+
+
+```{r}
+par(mfrow=c(1,1), mar=c(0,0,3,0))
+TernaryPlot(col = "lightyellow",
+            axis.col = "gray60",
+            alab=expression('x'%->%''),
+            blab=expression('y'%->%''),
+            clab=expression(''%<-%'z')
+            )
+title("Le monde est un triangle...", cex.main = 1)
+TernaryPoints(coo,col="red",pch=17,cex=1)
+TernaryText(coo,labels=row.names(coo),pos=2,col="red", cex=0.8)
+```
+
+
+
+## B.4 Le monde est un tore (donuts)
+
+![[Source : Wyrd Smythe, 2021, Flat Space of Torus](https://logosconcarne.com/2021/08/30/flat-space-of-the-torus/)](img/torus-earth.png)
+
 
 ## B.5 Le monde est une sphère
 
