@@ -764,21 +764,25 @@ On peut par exemple imaginer une décomposition additive de la fontion $f$ en de
 
 $D_{ij}  = f_1(\rho_i,\rho_j) + f_2(\theta_i, \theta_j)$
 
-On retrouve ainsi deux fonctions de distances classiques utilisées en géographie urbaine : la distance périphérique, la distance radiale:  
+On retrouve ainsi différences fonctions de distances utilisées en géographie urbaine : la distance centrale, la distance périphérique et la distance circumradiale  
 
-La **distance radiale ** fait l'hypothèse que tous les déplacements doivent passer par le centre du disque en suivant les radiales. Ce qui donne :
+La **distance centrale ** fait l'hypothèse que tous les déplacements doivent passer par le centre du disque en suivant les radiales. Ce qui donne :
 
-$D_{ij}^{Rad}  = \rho_i + \rho_j$
+$D_{ij}^{Ctr}  = \rho_i + \rho_j$
 
 
 La **distance périphérique** fait l'hypothèse que tous les déplacements dovent passer par la bordure externe du disque car le centre est saturé.
 
-$D_{ij}^{Cir}  = (R - \rho_i)+ (R- \rho_j) + 2 \pi R \frac{|\theta_i-\theta_j|}{360}$
+$D_{ij}^{Per}  = (R - \rho_i)+ (R- \rho_j) + 2 \pi R \frac{|\theta_i-\theta_j|}{360}$
 
+
+La **distance circumradiale** suppose quant à alle que les déplacements peuvent s'effectuer aussi bien à l'aide de radiales que de périphériques ce qui suppose que le réseau de transport combine les deux types d'axes. Elle constitue un équivalent de la distance de Manhattan mais appliquée à des villes de plan radioconcentriques comme Sfax. On peut la paramétrer à l'aide de coefficients $\alpha$ et $\beta$ pour tenir compte de vitesses différentes de circulation sur les radiales ou les périphériques. Elle possède la propriété d'admettre une infinité d'itinéraires différents puisque le plus court chemin peut s'effectuer selon différentes radiales ou différents périphériques.
+
+$D_{ij}^{CR}  = \frac {\alpha|\rho_i - \rho_j| +  \beta \frac{ |\theta_i-\theta_j]|}{\pi}}{\alpha+\beta}$
 
 
 ```{r}
-cooex<-coo[c(1,4),]
+cooex<-coo[c(11,2),]
 cooex$Xi<-cooex$rho*cos(pi*cooex$theta/180)
 cooex$Yi<-cooex$rho*sin(pi*cooex$theta/180)
 z<-seq(-pi, pi+0.1, 0.1)
@@ -786,7 +790,7 @@ zx<-cos(z)
 zy<-sin(z)
 
 ## Radiale
-par(mar = c(0,0,3,0), mfrow=c(1,2))
+par(mar = c(0,0,3,0), mfrow=c(1,3))
 plot(cooex$Xi,cooex$Yi,   
      asp=1,
      ylim= c(-1, 1),
@@ -795,7 +799,7 @@ plot(cooex$Xi,cooex$Yi,
      xlab=NA,
      ylab=NA,
      
-     main = "Distance radiale")
+     main = "Distance centrale")
 polygon(cbind(zx,zy),col="lightyellow")
 points(cooex$Xi, cooex$Yi,
      pch=20,
@@ -820,7 +824,7 @@ plot(cooex$Xi,cooex$Yi,
      xlab=NA,
      ylab=NA,
      
-     main = "Distance périphériqu")
+     main = "Distance périphérique")
 polygon(cbind(zx,zy),col="lightyellow")
 points(cooex$Xi, cooex$Yi,
      pch=20,
@@ -838,56 +842,111 @@ cooex$YR<-sin(pi*cooex$theta/180)
 
 segments(cooex$Xi[1],cooex$Yi[1],cooex$XR[1],cooex$YR[1],col='red', lwd=2)
 segments(cooex$Xi[2],cooex$Yi[2],cooex$XR[2],cooex$YR[2],col='red', lwd=2)
-min<-cooex$theta[1]
-max<-cooex$theta[2]
-z<-seq(min, max, 0.1)
-zx<-cos(pi*z/180)
-zy<-sin(pi*z/180)
-lines(cbind(zx,zy),col="red",lwd=2)
+min<-cooex$theta[2]+360
+max<-cooex$theta[1]
+zz<-seq(min, max, -0.1)
+zzx<-cos(pi*zz/180)
+zzy<-sin(pi*zz/180)
+lines(cbind(zzx,zzy),col="red",lwd=2)
+
+## Circumradiale
+
+plot(cooex$Xi,cooex$Yi,   
+     asp=1,
+     ylim= c(-1, 1),
+     xlim = c(-1,1),
+     axes = F,
+     xlab=NA,
+     ylab=NA,
+     
+     main = "Distance circumradiale")
+polygon(cbind(zx,zy),col="lightyellow")
+points(cooex$Xi, cooex$Yi,
+     pch=20,
+     col="red",
+     cex=2)
+text(cooex$Xi, cooex$Yi,
+     row.names(cooex),
+     pos=3,
+     cex=0.8,
+     col="black")
+points(0,0, pch=3)
+
+## Itinéraire n°1
+cooex$XR<-cos(pi*cooex$theta/180)*mean(cooex$rho)
+cooex$YR<-sin(pi*cooex$theta/180)*mean(cooex$rho)
+
+segments(cooex$Xi[1],cooex$Yi[1],cooex$XR[1],cooex$YR[1],col='darkgreen', lwd=2)
+segments(cooex$Xi[2],cooex$Yi[2],cooex$XR[2],cooex$YR[2],col='darkgreen', lwd=2)
+min<-cooex$theta[2]+360
+max<-cooex$theta[1]
+z<-seq(min, max, -0.1)
+zx<-cos(pi*z/180)*mean(cooex$rho)
+zy<-sin(pi*z/180)*mean(cooex$rho)
+lines(cbind(zx,zy),col="darkgreen",lwd=2)
+
+## Itinéraire n°2
+cooex$XR<-cos(pi*cooex$theta/180)*cooex$rho[1]
+cooex$YR<-sin(pi*cooex$theta/180)*cooex$rho[1]
+
+segments(cooex$Xi[1],cooex$Yi[1],cooex$XR[1],cooex$YR[1],col='darkgreen', lwd=1, lty=3)
+segments(cooex$Xi[2],cooex$Yi[2],cooex$XR[2],cooex$YR[2],col='darkgreen', lwd=1, lty=3)
+min<-cooex$theta[2]+360
+max<-cooex$theta[1]
+z<-seq(min, max, -0.1)
+zx<-cos(pi*z/180)*cooex$rho[1]
+zy<-sin(pi*z/180)*cooex$rho[1]
+lines(cbind(zx,zy),col="darkgreen",lwd=1, lty=3)
+
+## Itinéraire n°3
+cooex$XR<-cos(pi*cooex$theta/180)*cooex$rho[2]
+cooex$YR<-sin(pi*cooex$theta/180)*cooex$rho[2]
+
+segments(cooex$Xi[1],cooex$Yi[1],cooex$XR[1],cooex$YR[1],col='darkgreen', lwd=1, lty=3)
+segments(cooex$Xi[2],cooex$Yi[2],cooex$XR[2],cooex$YR[2],col='darkgreen', lwd=1, lty=3)
+min<-cooex$theta[2]+360
+max<-cooex$theta[1]
+z<-seq(min, max, -0.1)
+zx<-cos(pi*z/180)*cooex$rho[2]
+zy<-sin(pi*z/180)*cooex$rho[2]
+lines(cbind(zx,zy),col="darkgreen",lwd=1, lty=3)
 
 
 ```
 
 
-La **distance circumradiale** correspond enfin au minimum de la distance radiale et de la distance périphérique, c'est à dire au choix du meilleur itinéraire entre deux options de passage soit par le centre, soit par la périphérie. 
-
-Essayons de la calculer pour voir à quelle matrice de distance elle aboutit.
+Essayons à titre d'exemple de la calculer la distance circumradiale pour les paramètres $\alpha = \beta = 1$, c'est-à-dire en accordant la même importance aux différences angulaires et aux différences radiales.
 
 ```{r}
 mat<-matrix(,nrow=12,ncol=12)
 
-## Distance radiale
-Drad<-mat  
-for(i in 1:12){
-  for(j in 1:12){
-    Drad[i,j]<-rho[i]+rho[j]
-  }
-}
 
-## Distance périphérique
-Dper<-mat 
-for(i in 1:12){
-  for(j in 1:12){
-    Dper[i,j]<- (1-rho[i]) + 
-                (1-rho[j]) + 
-                 2*pi*abs(theta[i]-theta[j])/360
-  }
+
+
+disCR<-function(r1,r2,t1,t2){
+    difrho <-abs(r1-r2)
+    diftheta <- abs(t1-t2)
+    diftheta <- min(diftheta, 360-diftheta)/180
+    res<-(difrho + diftheta)/2
+    return(res)
 }
 
 
 ## Distance circumradiale
-Dcirc<-mat
+DCR<-mat  
 for(i in 1:12){
   for(j in 1:12){
-    Dcirc[i,j]<- min(Dper[i,j],Drad[i,j])
+    DCR[i,j]<-disCR(rho[i],rho[j],theta[i],theta[j])
   }
 }
 
 
-row.names(Dcirc)<-row.names(coo)
-colnames(Dcirc)<-row.names(coo)
 
-kable(Dcirc/2, caption = "Distance circumradiale", digits=2)
+row.names(DCR)<-row.names(coo)
+colnames(DCR)<-row.names(coo)
+
+kable(DCR, caption = "Distance circumradiale", digits=2)
+
 
 ```
 
@@ -895,14 +954,14 @@ kable(Dcirc/2, caption = "Distance circumradiale", digits=2)
 ### Partition
 
 ```{r}
-
+DCR<-as.dist(DCR)
 par(mfrow=c(1,1))
-reg<-hclust(D)
+reg<-hclust(DCR)
 plot(reg,hang = -1,
      labels = row.names(coo),
      main = "Classification en distance circumradiale",
      xlab = "Positions",
-     ylab = "Distance circum radiale normalisée")
+     ylab = "Distance circumradiale (1,1)")
 ```
 
 L'arbre nous suggère 4 classes que l'on peut visualiser ainsi
@@ -938,13 +997,106 @@ points(0,0, pch=3)
 
 ```
 
-L'image obtenu est de prime abord assez perturbante puisque des points qui nous semblent proches (en distance euclidienne) se retouvent en fait séparés dans des classes différentes et des points apparemment éloignés sont regroupés. La difficulté vient du fait que notre oeil regroupe de façon euclidienne alors que la distance qui est ici à l'oeuvre (circumradiale) opère différemment. Elle conduit en particulier à rapprocher les points localisés dans un même secteur angulaire c'est-à-dire ayant des valeurs proches de $\theta$.
+L'image obtenu est de prime abord assez perturbante puisque des points qui nous semblent proches (en distance euclidienne) se retouvent en fait séparés dans des classes différentes et des points apparemment éloignés sont regroupés. La difficulté vient du fait que notre oeil regroupe de façon euclidienne alors que la distance qui est ici à l'oeuvre (circumradiale) opère différemment. Elle conduit en particulier à rapprocher les points localisés dans un même secteur angulaire c'est-à-dire ayant des valeurs proches de $\theta$. Deux points centraux peuvent alors être très éloignés s'ils sont situés de part et d'autre du centre.
 
 ### Densité
 
-Le calcul des densités avec cette géométrie pour différentes portées de lissage est assez complexe ...
+Le calcul des densités avec cette géométrie pour différentes portées de lissage est assez complexe ... Nous procédons ici juste à un calcul approximatif pour des voisinages gaussiens de portée 0.1 et 0.2 en distance circumradiale.
 
-> A faire après des recherches biblio. plus poussées
+```{r}
+pts_theta<-rep(seq(0,360,1),21)
+pts_rho <-rep(seq(0,1,0.05),361)
+mat<-matrix(,nrow=7581, ncol=12)
+
+disCR<-function(r1,r2,t1,t2){
+    difrho <-abs(r1-r2)
+    diftheta <- abs(t1-t2)
+    diftheta <- min(diftheta, 360-diftheta)/180
+    res<-(difrho + diftheta)/2
+    return(res)
+}
+
+
+for(i in 1:7581){
+  for (j in 0:12){
+    mat[i,j]<-disCR(pts_rho[i],rho[j],pts_theta[i],theta[j])
+  }
+}
+alpha=log(0.5)/((0.1)**2)
+pot<-exp(alpha*mat**2)
+pot10<-apply(pot,1,sum)
+
+alpha=log(0.5)/((0.2)**2)
+pot<-exp(alpha*mat**2)
+pot20<-apply(pot,1,sum)
+
+
+
+mypts<-data.frame(rho=pts_rho,theta=pts_theta,pot10, pot20)
+mypts$X<-mypts$rho*cos(pi*mypts$theta/180)
+mypts$Y<-mypts$rho*sin(pi*mypts$theta/180)
+
+
+
+m<-mean(mypts$pot10)
+mypts$col10<-cut(mypts$pot10,breaks=c(0,0.1,0.2,0.5,1,2,5)) 
+levels(mypts$col10)<-c("blue","lightblue","lightgreen","lightyellow","orange","red")
+mypts$col10<-as.character(mypts$col10)
+
+m<-mean(mypts$pot20)
+mypts$col20<-cut(mypts$pot20,breaks=c(0,0.1,0.2,0.5,1,2,5)) 
+levels(mypts$col20)<-c("blue","lightblue","lightgreen","lightyellow","orange","red")
+mypts$col20<-as.character(mypts$col20)
+
+par(mar = c(0,0,3,0), mfrow=c(1,2))
+
+# Portée 0.1
+plot(mypts$X,mypts$Y, 
+     cex=mypts$rho*2+2, 
+     pch=20, 
+     axes=F,
+     asp=1,
+     col=mypts$col10,
+     main = "Voisinage gaussien (0.1)")
+points(coo$Xi, coo$Yi,
+     pch=20,
+     col="black",
+     cex=2)
+text(coo$Xi, coo$Yi,
+     row.names(coo),
+     pos=3,
+     cex=0.8,
+     col="black")
+points(0,0, pch=3)
+
+# Portée 0.2
+plot(mypts$X,mypts$Y, 
+     cex=mypts$rho*2+2, 
+     pch=20, 
+     axes=F,
+     asp=1,
+     col=mypts$col20,
+     main = "Voisinage gaussien (0.2)")
+points(coo$Xi, coo$Yi,
+     pch=20,
+     col="black",
+     cex=2)
+text(coo$Xi, coo$Yi,
+     row.names(coo),
+     pos=3,
+     cex=0.8,
+     col="black")
+points(0,0, pch=3)
+```
+
+
+Les couleurs sont calculées en fonction de la valeur du potentiel selon une échelle multiplicative. On remarque que des zones très proches du centre (ex. voisinage du point C) peuvent avoir des densités très faibles car elles ont peu d'autres points dans leur secteur angulaire. Inversement des points apparamment éloignés mais proches en terme angulaire ou en terme de distance au centre peuvent créer des pics locaux(cas des points B et D).
+
+
+**N.B.** : J'ai l'impression de réinventer la lune faute de recherches bibliographiques suffisante. Mais *who knows* ? 
+
+
+
 
 ## B.3 Le monde est un triangle 
 
