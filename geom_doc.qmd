@@ -41,6 +41,8 @@ library(potential)
 library(mapsf)
 library(sf)
 library(Ternary)
+library(RColorBrewer)
+library(ClusTorus)
 
 ```
 
@@ -177,7 +179,7 @@ plot(X, rep(0,n),
      xlim = c(0,100),
      ylim =c (-100,100),
      axes = F,
-     main = "Répartition des trois classes")
+     main = "Régions du monde segmentaire")
 segments(0,0,100,0, col="gray",lwd=2)
 segments(0,-1,0,1, col="gray",lwd=2)
 segments(100,-1,100,1, col="gray",lwd=2)
@@ -385,7 +387,7 @@ plot(coo2 ,
       pch=20,
      col="red",
      cex=0,
-     main = "Le monde est un cercle ...")
+     main = "Régions du monde circulaire")
 
 
 lines(cbind(zx,zy),col="gray",lwd=2)
@@ -405,7 +407,19 @@ text(coo2,
 
 ### Densités
 
-Comme dans le cas du monde linéaire, on peut tracer des courbes de densité paramétriques pour repérer les coeurs et les marges de notre espace. On utilise ici la méthode de lissage par kernel paramétrique (vonmises) du package `circular`avec des paramètres kappa de valeur 9 , 18 et 36.
+Comme dans le cas du monde linéaire, on peut tracer des courbes de densité paramétriques pour repérer les coeurs et les marges de notre espace. On doit alors faire apport à des lois de probabilité définies sur le cercle comme la loi de von Mises.
+
+::: {.callout-note title="La distribution de von Mises" collapse="true"}
+
+Vu notre faible niveau en mathématique, on s'appuiera ici sur l'article Wikipedia consécré à la loi de von Mises, disponible en cinq langues seulement dont le [français](https://fr.wikipedia.org/wiki/Loi_de_von_Mises) et l'[anglais](https://en.wikipedia.org/wiki/Von_Mises_distribution).
+
+>Dans la théorie des probabilités et en statistiques, la loi (distribution) de von Mises (appelée également distribution normale circulaire ou distribution de Tikhonov) est une densité de probabilité continue, nommée d'après Richard von Mises. Elle donne une bonne approximation de la loi normale périodique (en), qui est l'analogue circulaire de la loi normale. Un angle de diffusion $θ$ parcourant un cercle est une variable aléatoire suivant la loi normale périodique avec une variance non périodique qui croît linéairement en temps. D'un autre côté, la loi de von Mises est la distribution stationnaire d'un processus de diffusion et déviation sur le cercle dans un potentiel harmonique, i.e. avec une orientation guidée.La loi de von Mises est la loi de probabilités à entropie maximale pour une valeur donnée de $z = e^{i\theta}$. La loi de von Mises est un cas particulier de la loi de von Mises-Fisher sur la N-sphère. [Source : Wikipedia France, consulté le 27 nov. 2024](https://fr.wikipedia.org/wiki/Loi_de_von_Mises)
+
+![Densité de probabilité de la loi de von Mises](img/VonMises_distribution.png){width=300}
+
+
+:::
+On utilise ici la méthode de lissage par kernel paramétrique (vonmises) du package `circular`avec des paramètres kappa de valeur 9 , 18 et 36.
 
 ```{r}
 res9 <- density(C, bw=10, control.circular=list(units="degrees"))
@@ -534,7 +548,7 @@ plot(coo ,
      xlab=T,
      ylab=T,
      cex=0,
-     main = "Le monde est un échiquier ...")
+     main = "Régions du monde échiquier")
 
 polygon(x=c(0,100,100,0), y=c(0,0,100,100),col="lightyellow")
 
@@ -982,7 +996,7 @@ plot(coo$Xi,coo$Yi,
      xlab=NA,
      ylab=NA,
      
-     main = "Le monde est un disque ...")
+     main = "Régions du disque-monde ...")
 polygon(cbind(zx,zy),col="lightyellow")
 points(coo$Xi, coo$Yi,
      pch=20,
@@ -1182,9 +1196,502 @@ TernaryText(coo,labels=row.names(coo),pos=2,col="red", cex=0.8)
 
 
 
-## B.4 Le monde est un tore (donuts)
+### Distance
+
+Il existe de nombreuses distances possibles dans un triangle, mais l'une des plus logique semble être la *distance oblilinéaire* qui corresspond au plus court chemin en ne se déplaçant que selon l'une des trois directions du triangle. La distance sera plus ou moins longue selon que l'on passe  par les axes $(x,y)$, $(y,z)$ ou $(x,z)$. On choisira donc la distance la plus courte parmi les trois types d'itinéraires
+
+$D^{xy}(i,j) = |x_i-x_j| + |y_i-y_j|$
+
+$D^{yz}(i,j) = |y_i-y_j| + |z_i-z_j|$
+
+$D^{xz}(i,j) = |x_i-x_j| + |z_i-z_j|$
+
+$D_{min}^{xyz}(i,j) = min(D^{xy}(i,j), D^{yz}(i,j), D^{xz}(i,j))$
+
+
+Par exemple si on considère les point $i(0,50,50)$ et le point $j(50,20,30)$ on a :
+
+$D^{xy}(i,j) = |0-50| + |50-20|  = 80$
+
+$D^{yz}(i,j) = |50-20| + |50-30| = 50$
+
+$D^{xz}(i,j) = |0-50| + |50-30| = 70$
+
+$D_{min}^{xyz}(i,j) = min(80, 50, 70) = 50$
+
+Le plus court chemin est donc ici celui qui emprunte les axes $y$ et $z$ mais, comme dans le cas de la distance de Manhattan, il existe une infinité d'itinéraires possibles entre les deux points qui respectent la condition de plus court chemin et qui correspondent à un trapèze.
+
+```{r}
+par(mfrow=c(1,1), mar=c(0,0,3,0))
+TernaryPlot(col = "lightyellow",
+            axis.col = "gray60",
+            alab=expression('x'%->%''),
+            blab=expression('y'%->%''),
+            clab=expression(''%<-%'z')
+            )
+title("Plus court chemin en distance oblilinéaire", cex.main = 1)
+ex <- matrix(c(0,50,50, 20,50,30), ncol=3)
+names(ex)<-c("x","y","z")
+row.names(ex)=c("i","j")
+ex<-data.frame(ex)
+TernaryPoints(ex,col="red",pch=17,cex=1)
+TernaryText(ex,labels=row.names(ex),pos=2,col="red", cex=0.8)
+
+TernaryLines(list(c(0,50,50),c(20,50,30)), col="blue", lwd=2)
+TernaryLines(list(c(20,50,30),c(50,20,30)), col="blue", lwd=2)
+
+TernaryLines(list(c(0,50,50),c(30,20,50)), col="blue", lwd=2, lty=3)
+TernaryLines(list(c(30,20,50),c(50,20,30)), col="blue", lwd=2, lty=3)
+
+TernaryPolygon(list(c(0,50,50),
+                    c(20,50,30),
+                    c(50,20,30), 
+                    c(30,20,50),
+                    c(0,50,50)),
+               border=NA,
+               col=  adjustcolor("blue", alpha.f = 0.2),
+               
+               )
+
+```
+
+
+La matrice de distance entre nos 12 points pour cette métrique de plus court chemin oblilinéaire est la suivante 
+
+```{r}
+Dxy<-as.matrix(dist(coo[,1:2],method = "manhattan",upper = T, diag =T))
+Dyz<-as.matrix(dist(coo[,2:3],method = "manhattan",upper = T, diag =T))
+Dxz<-as.matrix(dist(coo[,c(1,3)],method = "manhattan",upper = T, diag =T))
+Dxyz<-Dxy
+for (i in 1:12){
+  for(j in 1:12){
+    Dxyz[i,j] <- min(Dxy[i,j], Dyz[i,j],Dxz[i,j])
+  }
+}
+
+kable(Dxyz, digits=2, caption = "Distance oblilinéaire")
+```
+
+### Partition
+
+```{r}
+DOB<-as.dist(Dxyz)
+par(mfrow=c(1,1))
+reg<-hclust(DOB)
+plot(reg,hang = -1,
+     labels = row.names(coo),
+     main = "Classification en distance oblilinéaire",
+     xlab = "Positions",
+     ylab = "Distance oblilinéaire")
+```
+
+L'arbre nous suggère 3 classes que l'on peut visualiser ainsi : 
+
+
+```{r}
+
+clus<-cutree(reg,k=3)
+
+par(mfrow=c(1,1), mar=c(0,0,3,0))
+TernaryPlot(col = "gray98",
+            axis.col = "gray60",
+            alab=expression('x'%->%''),
+            blab=expression('y'%->%''),
+            clab=expression(''%<-%'z')
+            )
+title("Régions du monde triangulaire", cex.main = 1)
+TernaryPoints(coo,col=clus,pch=17,cex=1)
+TernaryText(coo,labels=row.names(coo),pos=2,col=clus, cex=0.8)
+```
+
+
+### Densité
+
+Le package `Ternary` offre a première vue une fonction de calcul des densités ce qui facilité l'analyse des pics de concentration à différentes échelles selon un paramètre bandwidth (Bw). 
+
+```{r}
+par(mfrow=c(1,2), mar=c(0,0,3,0))
+
+
+
+mypal<-rev(brewer.pal(n = 11,name = "RdYlBu")[1:8])
+## Fig1
+
+TernaryPlot(col = "gray98",
+            axis.col = "gray60",
+            alab=expression('x'%->%''),
+            blab=expression('y'%->%''),
+            clab=expression(''%<-%'z')
+            )
+title("Bw = 0.20", cex.main = 1)
+TernaryDensityContour(coo, bandwidth=0.20,
+                      resolution = 50L,
+                      filled=T,fill.col = mypal,
+                     nlevels = 6)
+TernaryPoints(coo,col="red",pch=17,cex=1)
+
+TernaryPlot(col = "gray98",
+            axis.col = "gray60",
+            alab=expression('x'%->%''),
+            blab=expression('y'%->%''),
+            clab=expression(''%<-%'z')
+            )
+title("Bw = 0.40", cex.main = 1)
+TernaryDensityContour(coo, bandwidth=0.4,
+                      resolution = 50L,
+                      filled=T,fill.col = mypal,
+                     nlevels = 6)
+TernaryPoints(coo,col="red",pch=17,cex=1)
+
+
+```
+
+On repère bien sur les deux figures la façon dont s'opère la fusion des pics de densité et la possibilité que cela offre de définir des régionalisations multi-scalaires.  Mais il faudrait vérifier si le package utilise bien la distance oblilinéaire plutôt qu'une simple distance euclidienne ce qui ne serait pas logique par rapport aux hypothèses précédentes. Or, on a bien l'impression au vu des figures que le calcul est effectué en distance euclidienne puisque des cercles apparaissent autour des points isolés. 
+
+
+## B.4 Le monde est un tore
 
 ![[Source : Wyrd Smythe, 2021, Flat Space of Torus](https://logosconcarne.com/2021/08/30/flat-space-of-the-torus/)](img/torus-earth.png)
+
+
+```{r}
+library(plot3D)
+par(mfrow=c(1,2))
+
+# Torus
+R <- 2; r <- 2
+M <- mesh(seq(0, 2*pi,length.out=50), seq(0, 2*pi,length.out=50))
+
+alpha <- M$x; beta <- M$y
+
+x <- (R + r*cos(alpha)) * cos(beta)
+y <- (R + r*cos(alpha)) * sin(beta)
+z <-  r * sin(alpha)
+
+surf3D(x = x, y = y, z = z, colkey=FALSE, bty="b2",
+       phi = 50, theta = 30, main="Tore (vue 3D)")
+
+# Half Torus
+R <- 2; r <- 2
+M <- mesh(seq(0, 2*pi,length.out=50), seq(0, pi,length.out=50))
+
+alpha <- M$x; beta <- M$y
+
+x <- (R + r*cos(alpha)) * cos(beta)
+y <- (R + r*cos(alpha)) * sin(beta)
+z <-  r * sin(alpha)
+
+surf3D(x = x, y = y, z = z, colkey=FALSE, bty="b2",
+       phi = 40, theta = 20, main="Tore (coupe)")
+```
+
+
+::: {.callout-note title="Le tore comme variété à deux dimensions" collapse="true"}
+
+> La nature circulaire des angles fait que l'angle bivarié $(\theta,\phi)$ est sur le tore, qui peut être intégré comme une variété (*manifold*) bidimensionnelle dans $R^3$, et peut être coupé et aplati comme un carré $T^2 = [-\pi,\pi) \times [-\pi,\pi)$ sur $R^2$. Par conséquent, un $(-\pi,-\pi)$ est plus proche de $(\pi - \epsilon ,\pi - \epsilon )$ que $(-\pi +2 ,-\pi +2 )$ pour un certain $\epsilon >0$. En raison de cette contrainte géométrique, la plupart des méthodes de clustering prêtes à l'emploi ne sont pas applicables, du moins pas sans une adaptation appropriée. 
+
+Source : @jung2021
+
+:::
+
+
+### Données
+
+Comme dans le cas du monde circulaure On transforme les coordonnées $D_1$ en positions angulaires sur le cercle dans le sens trigonométrique $\theta_1 ...\theta_{12}$ et on effectue la même opération pour $D_2$ afin d'obtenir un second jeu de coordonnées $\phi_1 ...\phi_{12}$ comprises dans l'intervalle $[-\pi ; +\pi]$ (ou $[0; 2\pi]$ ce qui revient au même). Comme nos dimension avaient été tirées au sort sur l'intervalle $[0 ; 100]$ on applique la transformation suivante :
+
+$\theta(i) = \frac{2 \pi D_1(i)}{100}-\pi$
+$\phi(i) = \frac{2 \pi D_2(i)}{100}-\pi$
+
+
+```{r}
+theta <- 2*pi*D1/100 -pi
+phi <- 2*pi*D2/100 -pi
+coo<-data.frame(theta, phi)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo, caprion = "Coordonnées angulaires bidimensionnelles en radian")
+```
+
+
+### Visualisation
+
+Comme il est difficile de produire une visualisation d'un tore en trois dimensions sans que certains points soient cachés, on va utiliser ici une représentation en deux dimensions qui semble identique visuellement à celle monde de l'échiquier mais qui doit s'interpréter différemment.
+
+
+```{r}
+
+par(mar=c(4,4,4,4),  mfrow=c(1,1))
+plot(coo ,  
+     asp=1,
+     ylim= c(-pi, pi),
+     xlim = c(-pi,pi),
+     ylab="Theta",
+     xlab="Phi",
+     axes=T,
+     cex=0,
+     main = "Le monde est un tore ...")
+
+
+
+polygon(x=c(-pi,pi,pi,-pi), y=c(-pi,-pi,pi,pi),col="lightyellow")
+
+
+
+points(coo , 
+      pch=15,
+       col="red",
+       cex=0.9)
+
+
+text(coo,
+     row.names(coo),
+     pos=3,
+     cex=1,
+     col="black")
+
+
+```
+
+> Figures à améliorer en réduisant les coordonnées à -pi / +pi et en éliminant la marge
+
+### Distance
+
+On peut utiliser la fonction du package `circular`utilisées précédement pour calculer les distances sur le cercle en l'appliquant à chacune des dimensions. On obtient alors une distance $D^\theta$ et une distance $D^\phi$ que l'on peut combiner de différentes façons pour construire une distance sur le tore. La solution la plus simple est évidemment de les additionner ce qui revient à une forme de distance orthogonale sur le tore, analogue à la distance de Manhattan dans un plan euclidien avec une distance maximale égale à $2\pi$
+
+$D^{orth}(i,j) = |\theta_i-\theta_j| +|\phi_i-\phi_j|$
+
+Mais on peut également essayer de construire une distance équivalente à la distance euclidienne qui impliquerait des déplacements en oblique sur le tore déplié et serait alors plus courte que la distance de Manhattan. Cette solution revient à calculer la distance angulaire dans un espace à p dimensions.
+
+$D^{Ang}(i,j) = |\widehat{i,j}|$
+
+La valeur maximale de distance angulaire est alors égale à $2\pi/\sqrt{2}$. On peut facilement calculer cette distance angulaire à l'aide de la fonction `ang.pdist` du package **ClusTorus** proposé par @jung2021.
+
+
+Pour illustrer ces deux distances, considérons à titre d'exemple les points $C$ et $J$ situés respectivement en bas à gauche et enhaut à droite de la figure précédente. A première vue ils semblent très éloignés (dans un monde de type échiquier) mais ils sont en fait très proche dans la géométrie du tore où l'on ressort d'un côté pour rentrer par l'autre.
+
+```{r}
+ptC<-coo[3,]
+ptJ<-coo[10,]
+coo2<-rbind(ptC,ptJ)
+
+par(mar=c(0,0,3,0), mfrow=c(1,2))
+
+# Rectilinéaire
+plot(coo2 ,  
+     asp=1,
+     ylim= c(-pi, pi),
+     xlim = c(-pi,pi),
+     ylab="Theta",
+     xlab="Phi",
+     axes=F,
+     cex=0,
+     main = "Distances rectlinéaire")
+
+
+
+polygon(x=c(-pi,pi,pi,-pi), y=c(-pi,-pi,pi,pi),col="lightyellow")
+
+
+
+points(coo2 , 
+      pch=15,
+       col="black",
+       cex=0.9)
+
+
+text(coo2,
+     row.names(coo2),
+     pos=3,
+     cex=1,
+     col="black")
+
+arrows(coo2[1,1], coo2[1,2],coo2[1,1],-pi,
+       col="blue",length = 0.1,lwd=2)
+arrows(coo2[1,1], pi,coo2[1,1],coo2[2,2],
+       col="blue",length=0.1,lwd=2)
+arrows(coo2[1,1],coo2[2,2],-pi,coo2[2,2],
+       col="blue",length=0.1,lwd=2)
+arrows(pi,coo2[2,2],coo2[2,1],coo2[2,2],
+       col="blue",length=0.1,lwd=2)
+
+# Angulaire
+
+plot(coo2 ,  
+     asp=1,
+     ylim= c(-pi, pi),
+     xlim = c(-pi,pi),
+     ylab="Theta",
+     xlab="Phi",
+     axes=F,
+     cex=0,
+     main = "Distances angulaire")
+
+
+
+polygon(x=c(-pi,pi,pi,-pi), y=c(-pi,-pi,pi,pi),col="lightyellow")
+
+
+
+points(coo2 , 
+      pch=15,
+       col="black",
+       cex=0.9)
+
+
+text(coo2,
+     row.names(coo2),
+     pos=3,
+     cex=1,
+     col="black")
+dy = (pi+coo2[1,2] + pi-coo2[2,2])/2
+dx = (pi+coo2[1,1] + pi-coo2[2,1])/2
+dev<-(dy/dx)*pi+coo2[1,1]
+
+
+arrows(coo2[1,1], coo2[1,2],coo2[1,1]+dev,-pi,
+       col="red",length = 0.1,lwd=2)
+
+arrows(coo2[1,1]+dev, pi,-pi,pi+dev,
+       col="red",length = 0.1,lwd=2)
+
+arrows(pi, pi+dev,coo2[2,1],coo2[2,2],
+       col="red",length = 0.1,lwd=2)
+```
+
+
+Si on retient la distance angulaire et qu'on la normalise en la divisant par $2\pi/\sqrt(2)$ pour arriver à une distance maximale de 1, la matrice de distance entre nos points est la suivante :
+
+```{r}
+DD<-ang.pdist(coo)
+matDD<-as.matrix(DD)/(2*pi/sqrt(2))
+colnames(matDD)<-row.names(coo)
+rownames(matDD)<-row.names(coo)
+kable(matDD, caption = "Distance orthogonale sur le tore", digits=3)
+```
+
+
+
+### Partition
+
+```{r}
+par(mfrow=c(1,1))
+
+reg<-hclust(as.dist(matDD))
+plot(reg,hang = -1,
+     labels = row.names(coo),
+     main = "Classification en distance angulaire",
+     xlab = "Positions",
+     ylab = "Distance angulaire")
+```
+
+L'arbre nous suggère 4 classes que l'on peut visualiser ainsi
+
+```{r}
+clus<-cutree(reg,k = 4)
+
+par(mar=c(4,4,4,4),  mfrow=c(1,1))
+plot(coo ,  
+     asp=1,
+     ylim= c(-pi, pi),
+     xlim = c(-pi,pi),
+     ylab="Theta",
+     xlab="Phi",
+     axes=T,
+     cex=0,
+     main = "Régions du monde tore")
+
+
+
+polygon(x=c(-pi,pi,pi,-pi), y=c(-pi,-pi,pi,pi),col="lightyellow")
+
+
+
+points(coo , 
+      pch=15,
+       col=clus,
+       cex=0.9)
+
+
+text(coo,
+     row.names(coo),
+     pos=3,
+     cex=1,
+     col=clus)
+
+
+```
+
+
+La figure montre notamment un groupe régional composé des points $(B,C,L)$ qui semble contre-intuitif pour un regard habitué au monde-échiquier mais qui est parfaitement logique dans une monde en forme de tore. 
+
+### Densité
+
+
+```{r}
+
+par(mar=c(0,0,3,0), mfrow=c(1,2))
+
+# kappa = 6
+mygrid<-grid.torus(d=2,grid.size = 100 )
+mygrid<-mygrid-pi
+x<-kde.torus(coo,mygrid,concentration = 6)
+x<-x/mean(x)
+mycol<-cut(x, breaks= c(0,0.125,0.25, 0.5,1,2,4,8,max(x)))
+mypal<-rev(brewer.pal(8,"RdYlBu"))
+levels(mycol)<-mypal
+mycol<-as.character(mycol)
+
+
+plot(mygrid, 
+     cex=1, 
+     pch=20,
+     col=mycol,
+     asp=1, 
+     axes=F,
+     xlab=NA,
+     ylab=NA,
+     main="kappa=6")
+points(coo , 
+      pch=15,
+       col="black",
+       cex=0.9)
+text(coo,
+     row.names(coo),
+     pos=3,
+     cex=1,
+     col="black")
+
+# kappa = 3
+mygrid<-grid.torus(d=2,grid.size = 100 )
+mygrid<-mygrid-pi
+x<-kde.torus(coo,mygrid,concentration = 3)
+x<-x/mean(x)
+mycol<-cut(x, breaks= c(0,0.125,0.25, 0.5,1,2,4,8,max(x)))
+mypal<-rev(brewer.pal(8,"RdYlBu"))
+levels(mycol)<-mypal
+mycol<-as.character(mycol)
+
+
+plot(mygrid, 
+     cex=1, 
+     pch=20,
+     col=mycol,
+     asp=1, 
+     axes=F,
+     xlab=NA,
+     ylab=NA,
+     main="kappa=3")
+points(coo , 
+      pch=15,
+       col="black",
+       cex=0.9)
+text(coo,
+     row.names(coo),
+     pos=3,
+     cex=1,
+     col="black")
+```
+
 
 
 ## B.5 Le monde est une sphère
