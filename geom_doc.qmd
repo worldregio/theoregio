@@ -43,6 +43,7 @@ library(sf)
 library(Ternary)
 library(RColorBrewer)
 library(ClusTorus)
+library(sm)
 
 ```
 
@@ -1695,6 +1696,141 @@ text(coo,
 
 
 ## B.5 Le monde est une sphère
+
+![[Pool : tableau inspiré du poème d'Eluard "La terre est bleue comme une orange"](https://www.galerie-com.com/oeuvre/la-terre-est-bleue-comme-une-orange/446882/)](img/earth_orange.jpg){width=400}
+
+
+La représentation d'un monde comme une sphère est évidemment celle qui se rapproche le plus de l'intuition que peuvent avoir les lecteurs à qui on a enseigné que la Terre est une sphère légèrement aplatie au niveau des pôles. Il faut toutefois prendre garde que cette assimilation de notre Monde à une sphère est une abstraction et qu'elle peut être remise en cause d'au moins deux façons différentes :
+
+-   **La théorie de la terre plate** : Bien que la phénomène soit difficile à évaluer, il demeure certain que dans de nombreux pays il existe une proportion importante de personnes qui estiment que la terre est plate. Certaines études suggèrent même que le phénomène aurait tendance à augmenter, notamment chez les plus jeunes : *"La philosophie de la Terre plate existe depuis le XIXe siècle, mais elle a récemment pris de l'ampleur en ligne, en particulier sur YouTube et Twitter. Les croyants publient des vidéos et des mèmes qui défendent l'idée d'une Terre plate et avancent des théories du complot pour expliquer tout ce qui montre que la planète est en fait un globe terrestre."*[source : Pappas S., "A Third of Young Millennials Are Confused About This Incontrovertible Fact", Live Science](https://www.livescience.com/62220-millennials-flat-earth-belief.html)
+
+-   **La science de la zone critique** offre une objection de nature différente en soulignant que le Monde n'est pas une surface mais plutôt un volume compris entre deux sphères où se déroule l'ensemble de l'activité des êtres vivants, humains ou non. Ce concept de zone critique (*earth's critical zone*) a été utilisé dans la littérature anglophone en 1998 par Gail Ashley , spécialiste américaine de sédimentologie[@council2001]. Il a ensuite été introduit en français par le géochimiste français Jérôme Gaillardet [@gaillardet2023] au milieu des années 2000 puis largement popularisé par Bruno Latour [@latour2020].
+    
+On retiendra donc juste ici l'idée que la sphère est une des projections possibles du Monde (empirique) dans un monde (abstrait).
+
+
+### Données
+
+Il y a plusieurs façons de définir les coordonnées d'un point sur une sphère mais il suffit en pratique de deux coordonnées et non pas trois puisqu'il s'agit d'une variété d'ordre 2 projetée dans un espace de dimension 3. Nous pouvons utiliser les coordonnées en radian $\lambda_i$ et $\theta_i$ définies respectivement sur les intervalles $[-\frac{\pi}{2} ; \frac{\pi}{2}]$ et $[-\pi ; \pi]$. Mais l'on pourrait aussi bien les exprimer en degré pour retrouver les formulations habituelles en géographie de latitude et longitude définies respectivement sur les intervalles $[-90 ; 90]$ et $[-180 ; 180]$
+
+Nous convertissons les dimensions $D_1$ et $D_2$  précédentes en conservant leurs bornes initiales [0 ; 100] commes limites de l'espace après sa transformation sphérique. 
+
+```{r}
+lambda <- pi*D1/100 -pi/2
+theta <- 2*pi*D2/100 -pi
+latitude <- lambda*180/pi
+longitude <- theta*180/pi
+coo<-data.frame(lambda,theta, latitude, longitude)
+row.names(coo)<-c("A","B","C","D","E","F",
+                "G","H","I","J","K","L")
+kable(coo, caprion = "Coordonnées de latitude et longitude sur la sphère")
+```
+
+### Visualisation
+
+Dans ce cas particulier de la sphère, nous disposons d'au moins deux modes de visualisation. Soit à l'aide de programmes géométriques de visualisation 3D utilisant les coordonnées sphériques $(\lambda, \theta)$, soit à l'aide de programmes géographiques qui attendent plutôt des coordonnées de latitude et longitude et permettent de les projeter de différentes manières dans le plan pour réaliser des cartes du monde. 
+
+On peut tout d'abord visualiser nos coordonnées dans le plan, ce qui correspondrait en géographie à une projection de Mercator (EPSG = 4326).
+
+```{r}
+# World limits
+lon = c(-180, 180,180, -180,-180)
+lat = c(-90, -90, 90, 90,-90)
+Poly_Coord_df = data.frame(lon, lat)
+
+poly <- Poly_Coord_df %>% 
+  st_as_sf(coords = c("lon", "lat"), 
+           crs = 4326) 
+
+
+# Points
+map<-st_as_sf(coo, coords = c("longitude","latitude"))
+st_crs(map)<- 4326
+map$code<-row.names(coo)
+
+
+mf_theme("agolalight")
+mf_map(poly, pch=3, col="lightyellow")
+mf_graticule(poly,lty=3)
+mf_map(map, col="red",pch=20, add=T, cex=1)
+mf_label(map,var = "code", pos=4, col="red", cex=1)
+mf_layout("Coordonnées de latitude et longitude",frame=T, scale=F, credits="", arrow=F)
+
+
+```
+
+Mais on peut aussi effectuer différentes projections, par exemple en choisissant un azimuth et en visualisant la partie visible de la sphère : 
+
+```{r}
+library(plotly)
+map$Lon<-map$theta*180/pi
+map$Lat<-map$lambda*180/pi
+# Create map
+
+library(plotly)
+
+g <- list(showframe = TRUE,
+            lonaxis = list(showgrid = T),
+           lataxis = list(showgrid = T),
+          framecolor= toRGB("gray50"),
+          coastlinecolor = toRGB("white"),
+          showland = TRUE,
+          landcolor = toRGB("white"),
+          showcountries = TRUE,
+          countrycolor = toRGB("white"),
+          countrywidth = 0.2,
+         projection = list(type = 'azimuthal equal area'))
+     #     projection = list(type = 'mollweide'))
+
+
+
+p<- plot_geo(map)%>%
+  add_markers(x = ~Lon,
+              y = ~Lat,
+              sizes = 2,
+           #   size = ~pop,
+              color= "red",
+    #         color=~size,
+              colors="red",
+              hoverinfo = ~code) %>%
+  layout(geo = g,
+         title = "Visualisation 3D dynamique",
+         width=600,
+         height = 600)
+p
+
+```
+
+
+
+
+
+
+
+### Distances
+
+
+### Partition
+
+
+### Densité
+
+::: {.callout-note title="Le package sm et les méthodes de lissage non paramétriques" collapse="true"}
+
+Le package `sm` a été créé par ses auteurs pour illustrer une famille de méthodes de lissage non paramétriques décrités dans @bowman1997. La finalité du package est décrite comme suit par ses auteurs : 
+
+>Les fonctions de ce paquetage utilisent des méthodes de noyau pour construire des estimations non paramétriques des fonctions de densité et des courbes de régression dans une variété de contextes, et pour effectuer certaines opérations inférentielles.
+
+>En particulier, les estimations de densité peuvent être construites pour des données à 1, 2 et 3 dimensions. La régression non paramétrique pour les données continues peut être construite avec une ou deux covariables, et une variété de tests peut être effectuée. Plusieurs autres types de données peuvent être traités, notamment les données de survie, les séries temporelles, les données de comptage et les données binomiales.
+
+> Source : @sm:smoo1999
+
+
+Nous l'utiliserons principalement ici pour ses fonctions de visualisation de données sphériques et le calcul de densité de probabilité sur la sphère. Mais il possède un intérêt beaucoup plus large pour l'analyse de l'ensemble des géométries à 1, 2 ou 3 dimensions.
+
+
+:::
+
 
 
 # C. MONDES RETICULAIRES
