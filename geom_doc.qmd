@@ -1767,7 +1767,7 @@ map$Lon<-map$theta*180/pi
 map$Lat<-map$lambda*180/pi
 # Create map
 
-library(plotly)
+par(mfrow=c(1,1))
 
 g <- list(showframe = TRUE,
             lonaxis = list(showgrid = T),
@@ -1788,16 +1788,26 @@ p<- plot_geo(map)%>%
   add_markers(x = ~Lon,
               y = ~Lat,
               sizes = 2,
+              text =~code,
            #   size = ~pop,
               color= "red",
     #         color=~size,
               colors="red",
               hoverinfo = ~code) %>%
+    add_text(x = ~Lon,
+            y = ~Lat,
+            text=~code, 
+            sizes=2,
+            color = "red",
+            textposition="top center",
+            showlegend = F) %>%
   layout(geo = g,
          title = "Visualisation 3D dynamique",
-         width=600,
-         height = 600)
+         width=400,
+         height = 400)
+
 p
+
 
 ```
 
