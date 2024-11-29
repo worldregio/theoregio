@@ -1986,6 +1986,8 @@ p
 
 ### Densité
 
+Comme dans le cas du tore, la vsualisation des densités de probabilité sur la sphère doit faire appel à des packages spécialisés. Nous utilisons ici le package `sm` qui semble bien adapaté à l'objectif tant sur le plan statistique (utilisation de méthodes de lissage non paramétriques sur distances sphériques) que sur le plan des possibilités de visualisation.
+
 ::: {.callout-note title="Le package sm et les méthodes de lissage non paramétriques" collapse="true"}
 
 Le package `sm` a été créé par ses auteurs pour illustrer une famille de méthodes de lissage non paramétriques décrités dans @bowman1997. La finalité du package est décrite comme suit par ses auteurs : 
@@ -1997,11 +1999,101 @@ Le package `sm` a été créé par ses auteurs pour illustrer une famille de mé
 > Source : @sm:smoo1999
 
 
-Nous l'utiliserons principalement ici pour ses fonctions de visualisation de données sphériques et le calcul de densité de probabilité sur la sphère. Mais il possède un intérêt beaucoup plus large pour l'analyse de l'ensemble des géométries à 1, 2 ou 3 dimensions.
-
 
 :::
 
+
+
+A titre d'exemple, on peut examiner la distribution des densités de probabilité pour deux valeurs du paramètre kappa = 10  (lissage faible) ou kappa = 5 (lissage plus fort) :
+
+```{r}
+lat<-coo$latitude
+lon<-coo$longitude
+
+par(mfrow=c(2,2), mar=c(0,0,1.3,0))
+
+mypal<-brewer.pal(n=11, "RdYlBu")
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=10, 
+          theta=180,
+          phi=90, ngrid=500,
+          addpoints = TRUE)
+title(main = "Kappa = 10 (north view)", cex.main= 0.8)
+
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=10, 
+          theta=180,
+          phi=-90, ngrid=500,
+          addpoints = TRUE)
+title(main = "Kappa = 10 (south view)",cex.main=0.8)
+
+
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=10, 
+          theta=0,
+          phi=0,ngrid=500,
+          addpoints = TRUE)
+title(main = "Kappa = 10 (equat. view I)", cex.main= 0.8)
+
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=10, 
+          theta=180,ngrid=500,
+          phi=0,
+          addpoints = TRUE)
+title(main = "Kappa = 10 (equat. view II)",cex.main=0.8)
+
+
+```
+
+
+```{r}
+lat<-coo$latitude
+lon<-coo$longitude
+
+par(mfrow=c(2,2), mar=c(0,0,1.3,0))
+
+mypal<-brewer.pal(n=11, "RdYlBu")
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=5, 
+          theta=180,
+          phi=90,ngrid=500,
+          addpoints = TRUE)
+title(main = "Kappa = 5 (north view)", cex.main= 0.8)
+
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=5, 
+          theta=180,
+          phi=-90,ngrid=500,
+          addpoints = TRUE)
+title(main = "Kappa = 5 (south view)",cex.main=0.8)
+
+
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=5, 
+          theta=0,
+          phi=0,ngrid=500,
+          addpoints = TRUE)
+title(main = "Kappa = 5 (equat. view I)", cex.main= 0.8)
+
+sm.sphere(lat, lon,
+          sphim=TRUE, 
+          kappa=5, 
+          theta=180,
+          phi=0,ngrid=500,
+          addpoints = TRUE)
+title(main = "Kappa = 5 (equat. view II)",cex.main=0.8)
+
+
+```
+
+Comme dans les exemples précédents, on repère bien la façon dont les points isolés fusionnent dans des pics de densité de plus en plus large, ce qui permet de construire des régions en suivant les vallées qui séparent ces pics de concentration, comme nous le faisons habituellement dans le plan.
 
 
 # C. MONDES RETICULAIRES
