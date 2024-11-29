@@ -44,6 +44,7 @@ library(Ternary)
 library(RColorBrewer)
 library(ClusTorus)
 library(sm)
+library(plotly)
 
 ```
 
@@ -82,12 +83,6 @@ kable(pos)
 - La position D1 a été réalisée en effectuant un tirage uniforme aléatoire de 4 points entre 1 et 30, 4 points entre 41 et 60 et 4 points entre  71 et 100. Elle a donc exclu les positions $[31;40]$ et $[61 ; 70]$ du tirage au sort.
 
 - Les positions D2 a été en revanche construites par un tirage aléatoire uniforme sur l'ensemble de l'intervalle $[1;100]$
-
-
-
-
-
-
 
 
 # A. MONDES UNIDIMENSIONNELS
@@ -1759,7 +1754,63 @@ mf_layout("Coordonnées de latitude et longitude",frame=T, scale=F, credits="", 
 
 ```
 
-Mais on peut aussi effectuer différentes projections, par exemple en choisissant un azimuth et en visualisant la partie visible de la sphère : 
+Mais on peut aussi effectuer différentes projections classiques de la géographie, appliquées ici à une sphère quelconque. La fonction `plot_geo()` du package plotly permet en outre de rendre ces cartes dynamiques et de permettre à l'utilisateur de changer l'azimuth des projections.
+
+Si l'on adopte par exemple la **projection orthographique** on ne peut visualiser qu'un seul hémisphère à la fois et on ne peut donc pas visualiser simultanément les 12 points pris en exemple. 
+
+
+```{r}
+library(plotly)
+map$Lon<-map$theta*180/pi
+map$Lat<-map$lambda*180/pi
+# Create map
+
+par(mfrow=c(1,1))
+
+g <- list(showframe = TRUE,
+            lonaxis = list(showgrid = T),
+           lataxis = list(showgrid = T),
+          framecolor= toRGB("gray50"),
+          coastlinecolor = toRGB("white"),
+          showland = TRUE,
+          landcolor = toRGB("white"),
+          showcountries = TRUE,
+          countrycolor = toRGB("white"),
+          countrywidth = 0.2,
+         projection = list(type = 'orthographic'))
+     #     projection = list(type = 'mollweide'))
+
+
+
+p<- plot_geo(map)%>%
+  add_markers(x = ~Lon,
+              y = ~Lat,
+              sizes = 2,
+              text =~code,
+           #   size = ~pop,
+              color= "red",
+    #         color=~size,
+              colors="red",
+              hoverinfo = ~code) %>%
+    add_text(x = ~Lon,
+            y = ~Lat,
+            text=~code, 
+            sizes=2,
+            color = "red",
+            textposition="top center",
+            showlegend = F) %>%
+  layout(geo = g,
+         title = "Projection orthographique",
+         width=400,
+         height = 400)
+
+p
+
+
+```
+
+
+En revance, si on adopte une **projection azimuthal à surface égale**, le monde devient un disque où apparaissent simultanément les deux hémisphères et où le cercle qui définit la bordure externe correspond en fait au point opposé au point central. 
 
 ```{r}
 library(plotly)
@@ -1802,7 +1853,128 @@ p<- plot_geo(map)%>%
             textposition="top center",
             showlegend = F) %>%
   layout(geo = g,
-         title = "Visualisation 3D dynamique",
+         title = "Projection azimuthale",
+         width=400,
+         height = 400)
+
+p
+
+```
+
+
+Ces trois exemples de projection suffisent à montrer la diversité des représentations planes d'une sphère. Et du même coup les illusions d'optiques qu'elles peuvent engendrer dans la perception des distances, des angles ou des surfaces...
+
+### Distances
+
+Le calcul des distances entre points sur la sphère n'en demeure pas moins simple et peut être facilement réalisé avec des logiciels mathématiques ou géographiques. La différence étant que les premiers supposent une sphère parfaite alors que les seconds tiennent compte des irrégularités de l'ellipsoïde terrestre. 
+
+Comme précédemment on normalise cette distance par la valeur maximale possible sur une sphère soit $\pi R$ avec $R$ le rayon de la sphère.
+
+```{r}
+distsph<-st_distance(map, by_element = F)
+mat<-as.numeric(distsph)
+mat<-matrix(mat, ncol=12,nrow=12, byrow=T)
+mat<-mat/20000000
+row.names(mat)<-code
+colnames(mat)<-code
+kable(mat, digits=3, caption = "Distance sphérique normalisée")
+
+```
+
+### Partition
+
+On applique la méthode habituelle de classification :
+
+```{r}
+par(mfrow=c(1,1))
+
+reg<-hclust(as.dist(mat))
+plot(reg,hang = -1,
+     labels = row.names(coo),
+     main = "Classification en distance sphérique",
+     xlab = "Positions",
+     ylab = "Distance sphérique")
+```
+
+L'arbre nous suggère 4 classes que l'on peut visualiser en reprenant l'une des projections précédentes. La visualisation en projection de Mercator rassemble les points apparamment très éloignés mais en fait très proches car situés sur les pôles comme A, B et C. 
+
+```{r}
+clus<-cutree(reg,4)
+# World limits
+lon = c(-180, 180,180, -180,-180)
+lat = c(-90, -90, 90, 90,-90)
+Poly_Coord_df = data.frame(lon, lat)
+
+poly <- Poly_Coord_df %>% 
+  st_as_sf(coords = c("lon", "lat"), 
+           crs = 4326) 
+
+
+# Points
+map<-st_as_sf(coo, coords = c("longitude","latitude"))
+st_crs(map)<- 4326
+map$code<-row.names(coo)
+
+
+mf_theme("agolalight")
+mf_map(poly, pch=3, col="lightyellow")
+mf_graticule(poly,lty=3)
+mf_map(map, col=clus,pch=20, add=T, cex=1)
+mf_label(map,var = "code", pos=4, col=clus, cex=1)
+mf_layout("Régionalisation sur la sphère",frame=T, scale=F, credits="", arrow=F)
+
+
+```
+
+On se rend mieux compte des proximités en visualisant les points dans une projection orthographique où l'on peut faire tourner la sphère pour mieux percevoir les proximités des points ce chacune des classes
+
+```{r}
+clus<-cutree(reg,4)
+clus<-as.factor(clus)
+
+#levels(clus)<-c("red","blue","green","black")
+#clus<-as.character(clus)
+
+map$Lon<-map$theta*180/pi
+map$Lat<-map$lambda*180/pi
+# Create map
+
+par(mfrow=c(1,1))
+
+g <- list(showframe = TRUE,
+            lonaxis = list(showgrid = T),
+           lataxis = list(showgrid = T),
+          framecolor= toRGB("gray50"),
+          coastlinecolor = toRGB("white"),
+          showland = TRUE,
+          landcolor = toRGB("white"),
+          showcountries = TRUE,
+          countrycolor = toRGB("white"),
+          countrywidth = 0.2,
+         projection = list(type = 'orthographic'))
+     #     projection = list(type = 'mollweide'))
+
+
+
+p<- plot_geo(map)%>%
+  add_markers(x = ~Lon,
+              y = ~Lat,
+              sizes = 2,
+              text =~code,
+           #   size = ~pop,
+              color= clus,
+    #         color=~size,
+              colors=c("black","red","blue","green"),
+              hoverinfo = ~code) %>%
+    add_text(x = ~Lon,
+            y = ~Lat,
+            text=~code, 
+            sizes=2,
+            color = clus,
+            textposition="top center",
+            showlegend = F) %>%
+  layout(geo = g,
+         title = "Régionalisation sur la sphère",
          width=400,
          height = 400)
 
@@ -1810,17 +1982,6 @@ p
 
 
 ```
-
-
-
-
-
-
-
-### Distances
-
-
-### Partition
 
 
 ### Densité
