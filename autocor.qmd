@@ -1,0 +1,781 @@
+---
+title: "1. Autocorrélation spatiale"
+subtitle: "Géoprisme 2024 - Régionalisation"
+date: "2024-05-13"
+date-format: iso
+author: "Claude Grasland"
+title-slide-attributes:
+  data-background-color: "#75AADB85"
+  data-background-image: img/logogeoprisme.jpg
+  data-background-size: 200px
+  data-background-opacity: "0.9"
+  data-background-position: top center
+format: 
+  revealjs:
+    bibliography: [references.bib]
+    logo: img/logogeoprisme.jpg
+    footer: "Géoprisme 2024"
+    margin: 0
+    code-line-numbers: true
+    embed-resources: true
+    smaller: true
+    scrollable: true
+    theme: [simple, style.scss]
+execute:
+  echo: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(knitr)
+library(dplyr)
+library(sf)
+library(mapsf)
+library(RColorBrewer)
+library(spdep)
+library(rgeoda)
+library(gt)
+```
+
+# A. ECHELLE REGIONALE (Cours)
+
+
+
+## Fonds de carte
+
+```{r}
+map<-st_read("data/elect2024/map_reg.shp", quiet=T) %>%
+      mutate(code = code_reg) %>%
+      select(code=code_reg) %>%
+      st_transform(2154)
+
+mf_map(map, type="base",col="lightyellow")
+mf_label(map, var="code", col="red",cex=0.6)
+mf_layout("Carte de repérage", frame=T)
+```
+
+## Données
+
+```{r}
+don<-readRDS("data/elect2024/don_reg.RDS") %>%
+          select(code=code_reg, nom=nom_reg, 2:12)
+don$nom<-as.factor(don$nom) 
+levels(don$nom)<-c("ACAL", "AQUI","AURA","BOFC","BRET","CVDL","IDF","OCCI","NOPI","NORM","PDL","PACA")
+#datatable(don,  caption = "Tableau de données", options=list(digits=3) )
+don %>% as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Tableau de données**")
+  ) %>% 
+  fmt_number(
+    columns = Aubry:Autres,
+    decimals = 1)
+
+```
+
+
+
+```{r}
+mapdon<-left_join(map[,1],don)
+```
+
+## Identification des voisins
+
+```{r}
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$nom)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+
+# Affichage
+summary(map_nb_w)
+```
+
+## Carte des voisinages
+
+```{r}
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+mf_label(mapdon, var="nom", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+```
+
+
+
+
+## Choix d'une variable Y
+
+On choisit une variable $Y$ et on crée un fichier tab ne contenant que le code des régions cette variable. On crée une variable standardisée $Y_{std}$
+
+```{r}
+sel<-mapdon %>% select(code,nom, Y=Bardella) %>%
+                mutate(Y_std = as.numeric(scale(Y)) ) 
+nameY<-"% vote Bardella"
+don<-st_drop_geometry(sel)
+don %>% as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Tableau de données**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+## Cartographie des valeurs brutes et standardisées
+
+On cartographie la carte correspondante
+
+```{r}
+
+par(mfrow=c(1,2))
+# Carte de Y
+mf_map(sel, var="Y", type="choro",
+       nbreaks = 6,
+       leg_title = "Quantiles",
+       leg_val_rnd = 1)
+mf_layout("Y",
+          frame=T,
+          credits="",
+          arrow=F)
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Y_std",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+
+```
+
+
+## Valeurs de voisinage
+
+Pour une régon décrite par une variable $Y$, la variable de voisinage $Y_lag$ (*Lagged variable*) est la moyenne pondérée de Y dans les provinces voisines de i. Le calcul se fait donc très simplement en combinant les valeurs de Y et la matrice de voisinage pondéré que nous avons définie dans la section précédente.
+
+```{r }
+sel$Y_lag<-as.numeric(lag.listw(map_nb_w,sel$Y))
+sel$Y_std_lag<-as.numeric(lag.listw(map_nb_w,sel$Y_std))
+#mapsel$Y_std_lag<-lag.listw(map_nb_w,mapsel$Y_std)
+st_drop_geometry(sel) %>%
+ as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Valeurs standardisées et moyenne des voisins**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+
+## Valeurs de voisinage
+
+On peut vérifier que le calcul est juste en prenant l'exemple de la région BRET dont nous avons vu qu'elle n'a que deux voisins, PDL et NORM. Sa valeur moyenne de voisinage est donc :
+
+$Y_{lag}(BRET) = \frac{Y(PDL) + Y(NORM)}{2} = \frac{27.6 + 35.3}{2} = 31.5$
+
+Comme la valeur de $Y$ pour la Bretagne est de 25.6 on peut dire que cette région vote moins pour Bardella que ses régions voisines.
+
+## Calcul et test de l'indice de Moran
+
+L'indice de Moran, dans sa formulation la plus simple, n'est rien d'autre qu'une mesure de corrélation entre une variable $Y$ et la variable de voisinage de voisinage $Y_{lag}$ qui lui a été associée. On peut de mesurer ce coefficient à l'aide du coefficient de corrélation $r(Y,Y_{lag}$ :
+
+```{r }
+cor.test(sel$Y,sel$Y_lag)
+```
+
+Le coefficient d'autocorrélation spatiale de Moran serait donc ici égal à **+0.61** et le test de significativité semble significatif (p < 0.05)
+
+## Calcul et test de l'indice de Moran
+
+Mais en pratique la plupart des auteurs prfèrent que le coefficient de Moran soit mesuré non pas par le coefficient de corrélation mais par le coefficient $a$ de la pente de la droite de régression $Y_{lag} = a.Y + b$ :
+
+```{r }
+model<-lm(sel$Y_lag~sel$Y)
+summary(model)
+
+```
+
+Le coefficient d'autocorrélation spatiale de Moran est donc ici égal à **-0.208** ce qui est la réponse donnée par la fonction `moran.test()`du package **spdep** ou la fonction `moran_test()` du package **rgeoda**. Cela est de toutes façons équivalent et on peut vérifier que la mesure de significativité de la régression est la même que celle du coefficient de corrélation (p < 0.05)
+
+
+
+
+## Calcul et test de l'indice de Moran
+
+Les travaux de nombreux auteurs, et notamment Luc Anselin, ont proposé des améliorations au calcul de l'indice de Moran, notamment en présence de distributions Y de formes non gaussienne. L'usage du coefficient de corrélation linéaire suppose en effet que Y et Y_lag respectent des contraintes de normalité qui sont rarement vérifiées. Il vaut donc mieux dans ce cas recourir à des méthodes de simulation de type Monte Carlo pour obtenir un test réellement robuste. Ces méthodes sont toutefois gourmandes en temps de calcul et on ne les employera pas forcément sur les très grands tableaux. Les différentes variantes de calcul de l'indice de Moran sont facilement accessibles dans **spdep** grâce à la fonction `moran.test()`.
+
+
+```{r }
+spdep::moran.test(sel$Y,map_nb_w, alternative = "two.sided")
+```
+
+On retrouve bien notre coefficient de -0.208 mais le **test ici n'est pas concluant** et on ne peut donc pas affirmer que la configuration observée ne soit pas l'effet du hasard.
+
+## Construction et interprétation d'un diagramme de Moran
+
+On peut visualiser la relation statistique à l'aide d'un diagramme de Moran qui croise la variable standardisée $Y_{std}$ et la moyenne dans le voisinage de cette variable standardisée $Y_{std}^{lag}$
+
+```{r}
+par(mfrow=c(1,1))
+moran.plot(x=sel$Y_std,
+           listw=map_nb_w, 
+           pch=20,
+           main ="Diagramme de Moran",
+           xlab = "Variable observée (Y)", 
+           ylab=  "Variable de voisinage (Ylag)",labels = F)
+text(sel$Y_std, 
+     sel$Y_std_lag, 
+     sel$nom, 
+     cex=0.5, 
+     col="red",
+     pos=1)
+text(-1,-0.3,"Bas-Bas",col="grey30")
+text(-1,0.3,"Bas-Haut",col="grey30")
+text(1,-0.3,"Haut-Bas",col="grey30")
+text(1,0.3,"Haut-Haut",col="grey30") 
+```
+
+
+
+## Indices locaux (LISA)
+
+On peut finalement analyser pour chaque unité spatiale les cas exceptionnels à l'aide des indices locaux d'autocorrelation spatiale appelés en anglais LISA (*Local Index of Spatial Autocorrelation*)
+
+```{r }
+locm<-localmoran(sel$Y,map_nb_w,alternative = "two.sided")
+sel2<-as.data.frame(locm)
+tabres<-cbind(sel,sel2)
+
+
+st_drop_geometry(tabres) %>% as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Indices locaux d'autocorrélation spatiale**")
+  ) %>% 
+  fmt_number(
+    decimals = 2)
+```
+
+## Indices locaux (LISA)
+
+-   La variable **Ii** est l'indice d'autocorrélation spatiale local de la région. Il peut être localement plus fort ou plus faible que l'indice global qui a été mesuré sur l'ensemble des provinces italiennes. Il est directement lié à la position dans les quadrants du diagramme de Moran : l'indice sera positif pour les provinces de type *Low-Low* ou *High-High* mais négatif pour les provinces de type *Low-High* ou *High-Low*.
+-   la variable **E.Ii** est l'espérance de l'indice local d'autocorrélation spatiale, c'est-à-dire la valeur attendue en l'absence d'autocorrélation spatiale positive ou négative.
+-   la variance **var.Ii** est une mesure de la stabilité des différences observées entre une province et ses voisines. Si par exemple une province a une valeur deux fois plus forte que toutes ses voisines, la variance sera faible. Si en revanche elle est deux fois plus forte que la majorité de ses voisines mais deux fois pus faible qu'une partie d'entre elles, alors la variance sera forte.
+-   la variables **Z.Ii** est une mesure standardisée du coefficient d'autocorrélation qui permet de savoir rapidement si l'autocorrélation locale est significativement différente de zéro. D'une manière générale, l'autocorrélation est significative au seuil de 0.05 si cette valeur z est supérieure à +1.96 ou inférieure à -1.96.
+-   la variable **Pr(z\>0)** exprime la même chose en fournissant la p-value du test d'autocorrélation spatiale locale. On ne dispose plus du signe mais pn peut repérér directement toutes les provinces qui ont une autocorrélation spatiale significative (que celle-ci soit positive ou négative), à condition d'avoir bien pris la précaution de procéder à untest d'autocorrélation spatiale bilatéral à l'aide du paramètre alternative = "two.sided". Si on oublie ce paramètre, la probabilité sera celle d'avoir une autocorrélation spatiale positive uniquement.
+
+
+## Typologie de Moran
+
+L'ultime étape va consister à cartogaphier les provinces ayant un indice d'autocorrélation spatiale locale significativement différent de zéro en se fixant un seuil de significativité qui sera classiquement égal à 0.05 mais que l'on peut si on le souhaite rendre plus exigeant (0.01) ou moins exigeant (0.10). Dans notre exemple une seule région possède un indice local de Moran significatif, la région Ile de France qui est significativement dans le type **Bas-Haut** :
+
+
+```{r}
+# create a new variable identifying the moran plot quadrant for each observation, dismissing the non-significant ones
+tabres$typ <- NA
+
+# high-high quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-high"
+# low-low quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-low"
+# high-low quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-low"
+# low-high quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-high"
+# non-significant observations
+tabres[tabres$Pr.z....E.Ii.. > 0.05, "typ"] <- "not signif."  
+
+tabres$typ <- as.factor(tabres$typ)
+tabres$typcol<-NA
+tabres$typcol <- case_when(tabres$typ=="high-high" ~ "red",
+                        tabres$typ=="low-low" ~ "blue",
+                        tabres$typ=="high-low" ~ "pink",
+                        tabres$typ=="low-high" ~ "lightblue",
+                        tabres$typ=="not signif." ~ "gray90"                      
+                        )
+
+mf_map(tabres, type="base",  col=tabres$typcol)
+mf_layout("Typologie de Moran", 
+          frame=T,
+          credits ="")
+mf_legend(type="typo",val = c("haut-haut","bas-bas","haut-bas","bas-haut","non sign."),pal = c("red","blue","pink","lightblue","gray90"),title = "Types")
+```
+
+
+
+
+# B. ECHELLE DEPARTEMENTALE 
+
+
+## Préparation des données
+
+```{r}
+### Fonds de carte
+map<-st_read("data/elect2024/map_dept.shp", quiet=T) %>%
+      select(code=code_dpt,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_dept.RDS") %>%
+          select(code=code_dpt, nom=nom_dpt, 5:14)
+
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$code)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+summary(map_nb_w)
+
+# Carte de voisinage
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+mf_label(mapdon, var="code", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+
+```
+
+
+## Choix d'une variable Y
+
+
+```{r}
+sel<-mapdon %>% select(code,nom, Y=Bardella) %>%
+                mutate(Y_std = as.numeric(scale(Y)) ) 
+nameY<-"% vote Bardella"
+#tab<-st_drop_geometry(sel) %>% arrange(Y)
+#kable(head(tab), caption = "Valeurs les plus faibles", digits = 2)
+#kable(tail(tab), caption = "Valeurs les plus fortes", digits = 2)
+```
+
+
+```{r}
+
+par(mfrow=c(1,2))
+# Carte de Y
+mf_map(sel, var="Y", type="choro",
+       nbreaks = 6,
+       leg_title = "Quantiles",
+       leg_val_rnd = 1)
+mf_layout("Y",
+          frame=T,
+          credits="",
+          arrow=F)
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Y_std",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+
+```
+
+
+## Valeurs de voisinage
+
+
+```{r}
+sel$Y_lag<-as.numeric(lag.listw(map_nb_w,sel$Y))
+sel$Y_std_lag<-as.numeric(lag.listw(map_nb_w,sel$Y_std))
+#mapsel$Y_std_lag<-lag.listw(map_nb_w,mapsel$Y_std)
+st_drop_geometry(sel) %>%
+ as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Valeurs standardisées et moyenne des voisins**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+
+## Indice et diagramme de Moran
+
+
+```{r }
+spdep::moran.test(sel$Y,map_nb_w, alternative = "two.sided")
+```
+
+
+
+
+```{r}
+
+par(mfrow=c(1,1))
+moran.plot(x=sel$Y_std,
+           listw=map_nb_w, 
+           pch=20,
+           main ="Diagramme de Moran",
+           xlab = "Variable observée (Y)", 
+           ylab=  "Variable de voisinage (Ylag)",labels = F)
+text(sel$Y_std, 
+     sel$Y_std_lag, 
+     sel$nom, 
+     cex=0.5, 
+     col="red",
+     pos=1)
+```
+
+
+## Calcul des LISA
+
+
+```{r}
+locm<-localmoran(sel$Y,map_nb_w,alternative = "two.sided")
+sel2<-as.data.frame(locm)
+tabres<-cbind(sel,sel2)
+st_drop_geometry(tabres) %>% as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Indices locaux d'autocorrélation spatiale**")
+  ) %>% 
+  fmt_number(
+    decimals = 2)
+```
+
+
+
+## Carte des LISA
+
+```{r}
+
+par(mfrow=c(1,2))
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Variable standardisée",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(tabres, var="Z.Ii", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "Z-score",
+       leg_val_rnd = 1
+       )
+mf_layout("LISA",
+          frame=T,
+          credits="",
+          arrow=F)
+```
+
+
+## Typologie de Moran
+
+
+```{r}
+# create a new variable identifying the moran plot quadrant for each observation, dismissing the non-significant ones
+tabres$typ <- NA
+
+# high-high quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-high"
+# low-low quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-low"
+# high-low quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-low"
+# low-high quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-high"
+# non-significant observations
+tabres[tabres$Pr.z....E.Ii.. > 0.05, "typ"] <- "not signif."  
+
+tabres$typ <- as.factor(tabres$typ)
+tabres$typcol<-NA
+tabres$typcol <- case_when(tabres$typ=="high-high" ~ "red",
+                        tabres$typ=="low-low" ~ "blue",
+                        tabres$typ=="high-low" ~ "pink",
+                        tabres$typ=="low-high" ~ "lightblue",
+                        tabres$typ=="not signif." ~ "gray90"                      
+                        )
+
+mf_map(tabres, type="base",  col=tabres$typcol)
+mf_layout("Typologie de Moran", 
+          frame=T,
+          credits ="")
+mf_legend(type="typo",val = c("haut-haut","bas-bas","haut-bas","bas-haut","non sign."),pal = c("red","blue","pink","lightblue","gray90"),title = "Types")
+```
+
+
+
+
+# C. ECHELLE DES CIRCONSCRIPTIONS 
+
+On passe à l'échelle des circonscriptions législatives qui sont de niveau infradépartemental. On exclue le département de Paris (75) dont les données sont imparfaites.
+
+## Préparation des données
+
+```{r}
+### Fonds de carte
+map<-st_read("data/elect2024/map_circ.shp", quiet=T) %>%
+    filter(code_dpt!=75) %>%
+      select(code=ID,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_circ.RDS") %>%
+          filter(code_dpt!=75) %>%
+          select(code=ID, nom=ID, 10:20)
+
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$code)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+summary(map_nb_w)
+
+# Carte de voisinage
+par(mfrow=c(1,1))
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+#mf_label(mapdon, var="code", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+
+```
+
+
+## Choix d'une variable Y
+
+```{r}
+sel<-mapdon %>% select(code,nom, Y=Bardella) %>%
+                mutate(Y_std = as.numeric(scale(Y)) ) 
+nameY<-"% vote Bardella"
+#tab<-st_drop_geometry(sel) %>% arrange(Y)
+#kable(head(tab), caption = "Valeurs les plus faibles", digits = 2)
+#kable(tail(tab), caption = "Valeurs les plus fortes", digits = 2)
+```
+
+
+
+```{r}
+
+par(mfrow=c(1,2))
+# Carte de Y
+mf_map(sel, var="Y", type="choro",
+       nbreaks = 6,
+       lwd=0.1,
+       leg_title = "Quantiles",
+       leg_val_rnd = 1)
+mf_layout("Y",
+          frame=T,
+          credits="",
+          arrow=F)
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       lwd=0.1,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Y_std",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+
+```
+
+
+## Valeurs de voisinage
+
+
+```{r}
+sel$Y_lag<-as.numeric(lag.listw(map_nb_w,sel$Y))
+sel$Y_std_lag<-as.numeric(lag.listw(map_nb_w,sel$Y_std))
+#mapsel$Y_std_lag<-lag.listw(map_nb_w,mapsel$Y_std)
+st_drop_geometry(sel) %>%
+ as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Valeurs standardisées et moyenne des voisins**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+
+
+## Indice et diagramme de Moran
+
+
+```{r }
+spdep::moran.test(sel$Y,map_nb_w, alternative = "two.sided")
+```
+
+
+
+
+```{r}
+
+par(mfrow=c(1,1))
+moran.plot(x=sel$Y_std,
+           listw=map_nb_w, 
+           pch=20,
+           main ="Diagramme de Moran",
+           xlab = "Variable observée (Y)", 
+           ylab=  "Variable de voisinage (Ylag)",labels = F)
+text(sel$Y_std, 
+     sel$Y_std_lag, 
+     sel$nom, 
+     cex=0.5, 
+     col="red",
+     pos=1)
+text(-1,-0.3,"Low-Low",col="grey30")
+text(-1,0.3,"Low-High",col="grey30")
+text(1,-0.3,"High-Low",col="grey30")
+text(1,0.3,"High-High",col="grey30") 
+```
+
+
+
+
+## Calcul des LISA
+
+
+```{r}
+locm<-localmoran(sel$Y,map_nb_w,alternative = "two.sided")
+sel2<-as.data.frame(locm)
+tabres<-cbind(sel,sel2)
+st_drop_geometry(tabres) %>% as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Indices locaux d'autocorrélation spatiale**")
+  ) %>% 
+  fmt_number(
+    decimals = 2)
+```
+
+## Carte des LISA
+
+```{r}
+
+par(mfrow=c(1,2))
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       lwd=0.1,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Variable standardisée",
+          frame=T,
+          credits="",
+          arrow=F)
+
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(tabres, var="Z.Ii", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       lwd=0.1,
+       leg_title = "Z-score",
+       leg_val_rnd = 1
+       )
+mf_layout("LISA",
+          frame=T,
+          credits="",
+          arrow=F)
+```
+
+
+## Typologie de Moran
+
+
+```{r}
+# create a new variable identifying the moran plot quadrant for each observation, dismissing the non-significant ones
+tabres$typ <- NA
+
+# high-high quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-high"
+# low-low quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-low"
+# high-low quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-low"
+# low-high quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-high"
+# non-significant observations
+tabres[tabres$Pr.z....E.Ii.. > 0.05, "typ"] <- "not signif."  
+
+tabres$typ <- as.factor(tabres$typ)
+tabres$typcol<-NA
+tabres$typcol <- case_when(tabres$typ=="high-high" ~ "red",
+                        tabres$typ=="low-low" ~ "blue",
+                        tabres$typ=="high-low" ~ "pink",
+                        tabres$typ=="low-high" ~ "lightblue",
+                        tabres$typ=="not signif." ~ "gray90"                      
+                        )
+
+mf_map(tabres, type="base",  col=tabres$typcol)
+mf_layout("Typologie de Moran", 
+          frame=T,
+          credits ="")
+mf_legend(type="typo",val = c("haut-haut","bas-bas","haut-bas","bas-haut","non sign."),pal = c("red","blue","pink","lightblue","gray90"),title = "Types")
+```
+
+

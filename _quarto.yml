@@ -9,7 +9,11 @@ website:
       - href: index.qmd
         text: "Index"
       - href: geom_doc.qmd
-        text: "Geométries"  
+        text: "Geométries" 
+      - href: autocor.qmd
+        text: "Autocorrélation (cours)"    
+      - href: autocor_exo.qmd
+        text: "Autocorrélation (exo)"  
     right: 
       - icon: github # add icons as navbar buttons
         href: https://github.com/worldregio/theoregio

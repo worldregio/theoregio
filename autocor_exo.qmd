@@ -1,0 +1,707 @@
+---
+title: 'Autocorrelation spatiale'
+subtitle: "Application aux résultats des élections européennes de 2024 en France"
+date: "2024-12-11"
+date-format: iso
+author: "Claude Grasland"
+lang: fr
+format:
+  html:
+    embed-resources: true
+    smooth-scroll: true
+    fontsize: 0.9em
+    toc: true
+    toc-depth: 3
+    toc-title: "."
+    bibliography: [references.bib]
+    crossrefs-hover: false
+    theme: [yeti, style.scss]
+execute:
+  warning: false
+  message: false 
+  echo: true
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor_options: 
+  chunk_output_type: console
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+
+
+```{r setup, include=FALSE}
+library(knitr)
+library(dplyr)
+library(sf)
+library(mapsf)
+library(RColorBrewer)
+library(spdep)
+library(rgeoda)
+```
+
+
+
+- **Mise en place** : Télécharger le [dossier exo_autocor.zip](https://github.com/worldregio/theoregio/raw/main/exos/exo_autocorrelation.zip) et décompressez le sur votre ordinateur. Puis créez un projet R avant d'executer le programme
+
+
+
+Vous allez choisir une des listes électorales puis reprendre l'ensemble des analyses vues en cours à l'aide des programmes ci-dessous. Les choix possibles sont :
+
+"Aubry"        "Bardella"   "Bellamy"      "Deffontaines" "Glucksman"    "Hayer"  "Lassale"      "Marechal"      "Toussaint"   "Autres"  
+
+```{r}
+varY <- "Bardella"
+nameY<-paste("% vote", varY)
+```
+
+
+
+# A. ECHELLE REGIONALE 
+
+
+
+## Préparation des données
+
+```{r}
+### Fonds de carte
+map<-st_read("data/elect2024/map_reg.shp", quiet=T) %>%
+      select(code=code_reg,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_reg.RDS") %>%
+          select(code=code_reg, nom=nom_reg, 3:12)
+don$nom<-as.factor(don$nom) 
+levels(don$nom)<-c("ACAL", "AQUI","AURA","BOFC","BRET","CVDL","IDF","OCCI","NOPI","NORM","PDL","PACA")
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$code)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+summary(map_nb_w)
+
+# Carte de voisinage
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+mf_label(mapdon, var="code", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+
+```
+
+
+## Choix d'une variable Y
+
+
+```{r}
+sel<-mapdon %>% select(code,nom, Y=varY) %>%
+                mutate(Y_std = as.numeric(scale(Y)) ) 
+
+```
+
+
+```{r}
+
+par(mfrow=c(1,2))
+# Carte de Y
+mf_map(sel, var="Y", type="choro",
+       nbreaks = 6,
+       leg_title = "Quantiles",
+       leg_val_rnd = 1)
+mf_layout("Y",
+          frame=T,
+          credits="",
+          arrow=F)
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Y_std",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+
+```
+
+
+## Valeurs de voisinage
+
+
+```{r}
+sel$Y_lag<-as.numeric(lag.listw(map_nb_w,sel$Y))
+sel$Y_std_lag<-as.numeric(lag.listw(map_nb_w,sel$Y_std))
+#mapsel$Y_std_lag<-lag.listw(map_nb_w,mapsel$Y_std)
+st_drop_geometry(sel)
+```
+
+
+## Indice et diagramme de Moran
+
+
+```{r }
+spdep::moran.test(sel$Y,map_nb_w, alternative = "two.sided")
+```
+
+
+
+
+```{r}
+
+par(mfrow=c(1,1))
+moran.plot(x=sel$Y_std,
+           listw=map_nb_w, 
+           pch=20,
+           main ="Diagramme de Moran",
+           xlab = "Variable observée (Y)", 
+           ylab=  "Variable de voisinage (Ylag)",labels = F)
+text(sel$Y_std, 
+     sel$Y_std_lag, 
+     sel$nom, 
+     cex=0.5, 
+     col="red",
+     pos=1)
+```
+
+
+## Calcul des LISA
+
+
+```{r}
+locm<-localmoran(sel$Y,map_nb_w,alternative = "two.sided")
+sel2<-as.data.frame(locm)
+tabres<-cbind(sel,sel2)
+st_drop_geometry(tabres)
+```
+
+
+
+## Carte des LISA
+
+```{r}
+
+par(mfrow=c(1,2))
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Variable standardisée",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+mypal<-brewer.pal(5,"BrBG")
+mybreaks<-c(-10,-2,-1,1,2,10)
+mf_map(tabres, var="Z.Ii", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "Z-score",
+       leg_val_rnd = 1
+       )
+mf_layout("LISA",
+          frame=T,
+          credits="",
+          arrow=F)
+```
+
+
+## Typologie de Moran
+
+
+```{r}
+# create a new variable identifying the moran plot quadrant for each observation, dismissing the non-significant ones
+tabres$typ <- NA
+
+# high-high quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-high"
+# low-low quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-low"
+# high-low quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-low"
+# low-high quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-high"
+# non-significant observations
+tabres[tabres$Pr.z....E.Ii.. > 0.05, "typ"] <- "not signif."  
+
+tabres$typ <- as.factor(tabres$typ)
+tabres$typcol<-NA
+tabres$typcol <- case_when(tabres$typ=="high-high" ~ "red",
+                        tabres$typ=="low-low" ~ "blue",
+                        tabres$typ=="high-low" ~ "pink",
+                        tabres$typ=="low-high" ~ "lightblue",
+                        tabres$typ=="not signif." ~ "gray90"                      
+                        )
+
+mf_map(tabres, type="base",  col=tabres$typcol)
+mf_layout("Typologie de Moran", 
+          frame=T,
+          credits ="")
+mf_legend(type="typo",val = c("haut-haut","bas-bas","haut-bas","bas-haut","non sign."),pal = c("red","blue","pink","lightblue","gray90"),title = "Types")
+```
+
+
+
+
+# B. ECHELLE DEPARTEMENTALE 
+
+
+## Préparation des données
+
+```{r}
+### Fonds de carte
+map<-st_read("data/elect2024/map_dept.shp", quiet=T) %>%
+      select(code=code_dpt,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_dept.RDS") %>%
+          select(code=code_dpt, nom=nom_dpt, 5:14)
+
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$code)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+summary(map_nb_w)
+
+# Carte de voisinage
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+mf_label(mapdon, var="code", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+
+```
+
+
+## Choix d'une variable Y
+
+
+```{r}
+sel<-mapdon %>% select(code,nom, Y=varY) %>%
+                mutate(Y_std = as.numeric(scale(Y)) ) 
+
+
+```
+
+
+```{r}
+
+par(mfrow=c(1,2))
+# Carte de Y
+mf_map(sel, var="Y", type="choro",
+       nbreaks = 6,
+       leg_title = "Quantiles",
+       leg_val_rnd = 1)
+mf_layout("Y",
+          frame=T,
+          credits="",
+          arrow=F)
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Y_std",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+
+```
+
+
+## Valeurs de voisinage
+
+
+```{r}
+sel$Y_lag<-as.numeric(lag.listw(map_nb_w,sel$Y))
+sel$Y_std_lag<-as.numeric(lag.listw(map_nb_w,sel$Y_std))
+#mapsel$Y_std_lag<-lag.listw(map_nb_w,mapsel$Y_std)
+head(st_drop_geometry(sel))
+```
+
+
+## Indice et diagramme de Moran
+
+
+```{r }
+spdep::moran.test(sel$Y,map_nb_w, alternative = "two.sided")
+```
+
+
+
+
+```{r}
+
+par(mfrow=c(1,1))
+moran.plot(x=sel$Y_std,
+           listw=map_nb_w, 
+           pch=20,
+           main ="Diagramme de Moran",
+           xlab = "Variable observée (Y)", 
+           ylab=  "Variable de voisinage (Ylag)",labels = F)
+text(sel$Y_std, 
+     sel$Y_std_lag, 
+     sel$nom, 
+     cex=0.5, 
+     col="red",
+     pos=1)
+```
+
+
+## Calcul des LISA
+
+
+```{r}
+locm<-localmoran(sel$Y,map_nb_w,alternative = "two.sided")
+sel2<-as.data.frame(locm)
+tabres<-cbind(sel,sel2)
+head(st_drop_geometry(tabres)) 
+```
+
+
+
+## Carte des LISA
+
+```{r}
+
+par(mfrow=c(1,2))
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Variable standardisée",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+mypal<-brewer.pal(5,"BrBG")
+mybreaks<-c(-10,-2,-1,1,2,10)
+mf_map(tabres, var="Z.Ii", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       leg_title = "Z-score",
+       leg_val_rnd = 1
+       )
+mf_layout("LISA",
+          frame=T,
+          credits="",
+          arrow=F)
+```
+
+
+## Typologie de Moran
+
+
+```{r}
+# create a new variable identifying the moran plot quadrant for each observation, dismissing the non-significant ones
+tabres$typ <- NA
+
+# high-high quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-high"
+# low-low quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-low"
+# high-low quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-low"
+# low-high quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-high"
+# non-significant observations
+tabres[tabres$Pr.z....E.Ii.. > 0.05, "typ"] <- "not signif."  
+
+tabres$typ <- as.factor(tabres$typ)
+tabres$typcol<-NA
+tabres$typcol <- case_when(tabres$typ=="high-high" ~ "red",
+                        tabres$typ=="low-low" ~ "blue",
+                        tabres$typ=="high-low" ~ "pink",
+                        tabres$typ=="low-high" ~ "lightblue",
+                        tabres$typ=="not signif." ~ "gray90"                      
+                        )
+
+mf_map(tabres, type="base",  col=tabres$typcol)
+mf_layout("Typologie de Moran", 
+          frame=T,
+          credits ="")
+mf_legend(type="typo",val = c("haut-haut","bas-bas","haut-bas","bas-haut","non sign."),pal = c("red","blue","pink","lightblue","gray90"),title = "Types")
+```
+
+
+
+
+# C. ECHELLE DES CIRCONSCRIPTIONS 
+
+On passe à l'échelle des circonscriptions législatives qui sont de niveau infradépartemental. On exclue le département de Paris (75) dont les données sont imparfaites.
+
+## Préparation des données
+
+```{r}
+### Fonds de carte
+map<-st_read("data/elect2024/map_circ.shp", quiet=T) %>%
+    filter(code_dpt!=75) %>%
+      select(code=ID,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_circ.RDS") %>%
+          filter(code_dpt!=75) %>%
+          select(code=ID, nom=ID, 10:20)
+
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$code)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+summary(map_nb_w)
+
+# Carte de voisinage
+par(mfrow=c(1,1))
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+#mf_label(mapdon, var="code", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+
+```
+
+
+## Choix d'une variable Y
+
+```{r}
+sel<-mapdon %>% select(code,nom, Y=varY) %>%
+                mutate(Y_std = as.numeric(scale(Y)) ) 
+
+
+```
+
+
+
+```{r}
+
+par(mfrow=c(1,2))
+# Carte de Y
+mf_map(sel, var="Y", type="choro",
+       nbreaks = 6,
+       lwd=0.1,
+       leg_title = "Quantiles",
+       leg_val_rnd = 1)
+mf_layout("Y",
+          frame=T,
+          credits="",
+          arrow=F)
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       lwd=0.1,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Y_std",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+
+```
+
+
+## Valeurs de voisinage
+
+
+```{r}
+sel$Y_lag<-as.numeric(lag.listw(map_nb_w,sel$Y))
+sel$Y_std_lag<-as.numeric(lag.listw(map_nb_w,sel$Y_std))
+#mapsel$Y_std_lag<-lag.listw(map_nb_w,mapsel$Y_std)
+head(st_drop_geometry(sel)) 
+```
+
+
+
+## Indice et diagramme de Moran
+
+
+```{r }
+spdep::moran.test(sel$Y,map_nb_w, alternative = "two.sided")
+```
+
+
+
+
+```{r}
+
+par(mfrow=c(1,1))
+moran.plot(x=sel$Y_std,
+           listw=map_nb_w, 
+           pch=20,
+           main ="Diagramme de Moran",
+           xlab = "Variable observée (Y)", 
+           ylab=  "Variable de voisinage (Ylag)",labels = F)
+text(sel$Y_std, 
+     sel$Y_std_lag, 
+     sel$nom, 
+     cex=0.5, 
+     col="red",
+     pos=1)
+text(-1,-0.3,"Low-Low",col="grey30")
+text(-1,0.3,"Low-High",col="grey30")
+text(1,-0.3,"High-Low",col="grey30")
+text(1,0.3,"High-High",col="grey30") 
+```
+
+
+
+
+## Calcul des LISA
+
+
+```{r}
+locm<-localmoran(sel$Y,map_nb_w,alternative = "two.sided")
+sel2<-as.data.frame(locm)
+tabres<-cbind(sel,sel2)
+head(st_drop_geometry(tabres))
+
+```
+
+## Carte des LISA
+
+```{r}
+
+par(mfrow=c(1,2))
+
+# Carte de Ystd
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(sel, var="Y_std", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       lwd=0.1,
+       leg_title = "moy. & ec.type",
+       leg_val_rnd = 1
+       )
+mf_layout("Variable standardisée",
+          frame=T,
+          credits="",
+          arrow=F)
+
+
+mypal<-brewer.pal(5,"BrBG")
+mybreaks<-c(-10,-2,-1,1,2,10)
+mf_map(tabres, var="Z.Ii", type="choro",
+       breaks=mybreaks, 
+       pal = mypal,
+       lwd=0.1,
+       leg_title = "Z-score",
+       leg_val_rnd = 1
+       )
+mf_layout("LISA",
+          frame=T,
+          credits="",
+          arrow=F)
+```
+
+
+## Typologie de Moran
+
+
+```{r}
+# create a new variable identifying the moran plot quadrant for each observation, dismissing the non-significant ones
+tabres$typ <- NA
+
+# high-high quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-high"
+# low-low quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-low"
+# high-low quadrant
+tabres[(tabres$Y_std >= 0 & 
+                 tabres$Y_std_lag <= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "high-low"
+# low-high quadrant
+tabres[(tabres$Y_std <= 0 & 
+                 tabres$Y_std_lag >= 0) & 
+                tabres$Pr.z....E.Ii..<0.05, "typ"] <- "low-high"
+# non-significant observations
+tabres[tabres$Pr.z....E.Ii.. > 0.05, "typ"] <- "not signif."  
+
+tabres$typ <- as.factor(tabres$typ)
+tabres$typcol<-NA
+tabres$typcol <- case_when(tabres$typ=="high-high" ~ "red",
+                        tabres$typ=="low-low" ~ "blue",
+                        tabres$typ=="high-low" ~ "pink",
+                        tabres$typ=="low-high" ~ "lightblue",
+                        tabres$typ=="not signif." ~ "gray90"                      
+                        )
+
+mf_map(tabres, type="base",  col=tabres$typcol)
+mf_layout("Typologie de Moran", 
+          frame=T,
+          credits ="")
+mf_legend(type="typo",val = c("haut-haut","bas-bas","haut-bas","bas-haut","non sign."),pal = c("red","blue","pink","lightblue","gray90"),title = "Types")
+
+```
+
