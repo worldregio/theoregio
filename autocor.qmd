@@ -1,7 +1,7 @@
 ---
-title: "1. Autocorrélation spatiale"
-subtitle: "Géoprisme 2024 - Régionalisation"
-date: "2024-05-13"
+title: "Autocorrélation spatiale"
+subtitle: "Cours Géoprisme 2024"
+date: "2024-12-11"
 date-format: iso
 author: "Claude Grasland"
 title-slide-attributes:

@@ -14,6 +14,10 @@ website:
         text: "Autocorrélation (cours)"    
       - href: autocor_exo.qmd
         text: "Autocorrélation (exo)"  
+      - href: classifregio.qmd
+        text: "Classif./Regio. (cours)"  
+      - href: classifregio_exo.qmd
+        text: "Classif./Regio. (exo)"
     right: 
       - icon: github # add icons as navbar buttons
         href: https://github.com/worldregio/theoregio

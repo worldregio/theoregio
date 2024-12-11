@@ -1,0 +1,713 @@
+---
+title: 'Classification/Régionalisation'
+subtitle: "Application aux résultats des élections européennes de 2024 en France"
+date: "2024-12-11"
+date-format: iso
+author: "Claude Grasland"
+lang: fr
+format:
+  html:
+    embed-resources: true
+    smooth-scroll: true
+    fontsize: 0.9em
+    toc: true
+    toc-depth: 3
+    toc-title: "."
+    bibliography: [references.bib]
+    crossrefs-hover: false
+    theme: [yeti, style.scss]
+execute:
+  warning: false
+  message: false 
+  echo: true
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor_options: 
+  chunk_output_type: console
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+
+```{r setup, include=FALSE}
+library(knitr)
+library(dplyr)
+library(sf)
+library(mapsf)
+library(RColorBrewer)
+library(spdep)
+library(rgeoda)
+library(FactoMineR)
+```
+
+
+
+- **Mise en place** : Télécharger le [dossier exo_autocor.zip](https://github.com/worldregio/theoregio/raw/main/exos/exo_autocorrelation.zip) et décompressez le sur votre ordinateur. Puis créez un projet R avant d'executer le programme
+
+
+Vous allez choisir une ou plusieurs régions voisines hors Ile-de-France  (données imparfaites pour Paris)
+
+"ALSACE-CHAMPAGNE-ARDENNE-LORRAINE"  
+"AQUITAINE-LIMOUSIN-POITOU-CHARENTES"
+"AUVERGNE-RHONE-ALPES"               
+"BOURGOGNE-FRANCHE-COMTE"            
+"BRETAGNE"                           
+"CENTRE-VAL DE LOIRE"                
+"LANGUEDOC-ROUSSILLON-MIDI-PYRENEES" 
+"NORD-PAS-DE-CALAIS-PICARDIE"        
+"NORMANDIE"                          
+"PAYS DE LA LOIRE"                   
+"PROVENCE-ALPES-COTE D'AZUR"  
+
+Recopiez leurs noms ci-dessous : 
+
+```{r}
+myreg <- c("LANGUEDOC-ROUSSILLON-MIDI-PYRENEES")
+```
+
+
+# A. CLASSIFCATION A L'ECHELLE REGIONALE
+
+On commence par des méthodes statistiques classiques (ACP et CAH) afin de situer notre région par rapport aux autres, de voir quels partis y sont les plus importants ou les plus faibles, et de voir quelles sont les régions qui lui ressemblent le plus ou le moins.
+
+- N.B. On a choisi d'utiliser une **ACP sur variables standardisées**, ce qui donne le même poids à tous les partis. On aurait pu évidemment faire un choix différent...
+
+
+## Tableau de données
+
+```{r}
+### Données
+don<-readRDS("data/elect2024/don_reg.RDS")
+code<-as.factor(don$nom_reg)
+levels(code)<-c("ACAL", "AQUI","AURA","BOFC","BRET","CVDL","IDF","OCCI","NOPI","NORM","PDL","PACA")
+tab<-as.matrix(don[,3:12])
+rownames(tab)<-code
+kable(tab, digits=1, caption = "Résultats des européeennes 2024 par région")
+```
+## Analyse en composantes principales
+
+On utilise la procédure PCA de FactoMineR que la plupart des étudiants connaissent :
+
+```{r}
+acp<-PCA(tab,  scale.unit = T)
+summary(acp)
+```
+
+- **Commentaires** :  
+    + L'axe 1 résume  ... % de l'information et oppose les régons ... aux régions ...
+    + L'axe 2 résume  ... % de l'information et oppose les régons ... aux régions ...
+    + La position de notre région dans le plan factoriel montre ...
+
+### Classification ascendante hiérarchique
+
+Vous allez ensuite classer les régions en choisissant le nombre de classes adapté (ici 2)
+
+```{r}
+
+cah<-HCPC(acp, nb.clust = 2, graph=F)
+plot(cah,choice = "tree")
+catdes(cah$data.clust,num.var = 11)
+```
+
+- **Commentaire** : La classification met en évidence deux grands types de région.
+  + La classe 1 ( ...) correspond à des régions qui ont significativement plus voté pour la.les listes ... et moins voté pour la.les listes ...
+  + La classe 2 (...) correspond à des régions qui ont significativement plus voté pour la.les listes ... et moins voté pour la.les listes ...
+  + notre région appartient à la classe ...
+
+### Classification ascendante hiérarchique
+
+```{r}
+cah<-HCPC(acp, nb.clust = 4, graph=F)
+plot(cah,choice = "tree")
+catdes(cah$data.clust,num.var = 11)
+```
+
+
+
+- **Commentaire** : Ma région ...
+
+
+# B. CLASSIFICATION A L'ECHELLE DEPARTEMENTALE
+
+Nous allons maintenant reprendre l'analyse de la France entière mais au niveau des départements afin de savoir si notre région forme un ensemble homogène ou si les départements qui la compose font partie de classes différentes.
+
+
+## Préparation des données
+
+On effectue cette fois-ci une jointure entre les données départementales et le fonds de carte correspondant afin de pouvoir produire des cartes.
+
+
+```{r}
+### Fonds de carte région (pour habillage)
+mapreg<-st_read("data/elect2024/map_reg.shp", quiet=T) %>%
+      st_transform(2154)
+
+### Fonds de carte dept
+map<-st_read("data/elect2024/map_dept.shp", quiet=T) %>%
+      select(code=code_dpt,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_dept.RDS") %>%
+          select(code=code_dpt, nom=nom_dpt, 5:14)
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+```
+
+## Cartographie rapide
+
+On visualise rapidement les scores de chaque parti pour avoir une idée de leur répartition. Il est évidemment possible de faire des cartes plus belles !
+
+```{r}
+plot(mapdon[4:13])
+```
+
+## Analyse en composantes principales
+
+On utilise la même procédure que pour les régions
+
+```{r}
+tab<-mapdon[,4:13] %>% st_drop_geometry()
+row.names(tab)<- mapdon$code
+acp<-PCA(tab,  scale.unit = T)
+summary(acp)
+```
+- **Commentaires** :  A priori ils sont assez vosins de ceux déja vus pour les régions
+    + L'axe 1 résume  ... % de l'information et oppose les régons ... aux régions ...
+    + L'axe 2 résume  ... % de l'information et oppose les régons ... aux régions ...
+
+
+On va cette fois-ci cartographier les axes factoriels afin de mieux comprendre les oppositions spatiales qu'ils mettent en évidence et pour situer les départements de notre région : 
+
+```{r}
+mapdon$axe1<-acp$ind$coord[,1]
+mapdon$axe2<-acp$ind$coord[,2]
+
+par(mfrow=c(1,2))
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+
+mf_map(mapdon, type="choro", var="axe1", pal=mypal, breaks=mybreaks, lwd=0.1, border="white")
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+mf_layout("Axe1 (33%): Ecolo+Bobos Vs Prolos+Fachos ?", frame=T)
+
+mf_map(mapdon, type="choro", var="axe2",pal=mypal, breaks=mybreaks, lwd=0.1, border="white")
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+mf_layout("Axe2 (22%) : Gauche Vs Droite ?", frame=T)
+```
+
+
+### Classification ascendante hiérarchique
+
+Vous allez ensuite classer les départements en choisissant le nombre de classes adapté (j'ai pris 4 mais on peut faire un choix différent)
+
+```{r}
+
+cah<-HCPC(acp, nb.clust = 3, graph=F)
+plot(cah,choice = "tree")
+catdes(cah$data.clust,num.var = 11)
+```
+
+- **Commentaire** : La classification met en évidence deux grands types de région.
+  + La classe 1 ( ...) 
+  + La classe 2 (...) .
+  + la classe 3 (...)
+  + ...
+
+On peut ensuite cartogaphier les classes correspondantes pour mieux voir la distribution spatiale. Cela suppose que l'on ait donné aux classes des noms suite à l'interprétation
+
+```{r}
+mapdon$cah<-as.factor(cah$data.clust$clust)
+levels(mapdon$cah)<-c("Classe 1 : Fachos ?", 
+                      "Classe 2 = Gauchos ?",
+                      "Classe 3 = Bobos ")
+
+
+par(mfrow=c(1,1))
+
+mf_map(mapdon, type="typo", var="cah", lwd=0.1, border="white", leg_title = "Classes")
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+mf_layout("Typologie en trois classes aux noms ...discutables !", frame=T,credits = "")
+
+
+```
+
+- **Commentaire** : Les différentes **classes** recouvrent souvent des départements voisins mais elles neforment pas des **régions** puisque chaque classe se compose de plusieurs blocs départementaux séparés. Seule la classe 1 forme presque une région d'un seul bloc.
+
+
+
+# C. REGIONALISATION A L'ECHELLE DEPARTEMENTALE
+
+Nous reprenons l'analyse précédente mais avec une légère modification puisque nous allons maintenant cherche à construire des **régions** et non pas des **classes**. Les critères utilisés sont les mêmes (distance euclidienne standardisée) mais le **regroupement ne pourra s'opérer qu'entre départements voisins i.e. ayant une frontière commune**. Il y a beaucoup de méthodes possibles de régionalisation mais on se limitera ici à la méthode SKATER vue en cours. 
+
+## Préparation des données
+
+la préparation des données est la même que précédemment
+
+```{r}
+### Fonds de carte région (pour habillage)
+mapreg<-st_read("data/elect2024/map_reg.shp", quiet=T) %>%
+      st_transform(2154)
+
+### Fonds de carte dept
+map<-st_read("data/elect2024/map_dept.shp", quiet=T) %>%
+      select(code=code_dpt,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_dept.RDS") %>%
+          select(code=code_dpt, nom=nom_dpt, 5:14)
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+```
+
+## Calcul du graphe de contiguïté
+
+On utilise la procédure `poly2nb()` du package spdep  : 
+
+```{r}
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$code)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+summary(map_nb_w)
+
+# Carte de voisinage
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+mf_label(mapdon, var="code", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+```
+
+- **Commentaire** : On vérifie que le graphe est connexe et que chaque département a au moins un voisin. Certains départements situes aux extrémités du pays ont un seul voisin (ex. O6 Alpes Maritime ou 09 Finistère) tandis que d'autres ont jusqu'à 10 voisins (77 : Seine-et-Marne). Leurs possibilités de regroupement en région seront donc plus ou moins contraintes.
+
+## Calcul de la matrice de dissimilarité 
+
+Nous devons calculer la matrice de dissimilarité directement à partir du tableau des variables standardisées.
+
+```{r}
+# choix des variables
+tab<-mapdon[,4:13] %>% st_drop_geometry()
+row.names(tab)<- mapdon$code
+
+# standardisation
+tabstd <-scale(tab)
+
+# calcul des distances
+matdis <- as.matrix(dist(tabstd, method="euclidean"))
+
+# Extrait de la matrice
+kable(matdis[c("06","83","92","78"),c("06","83","92","78")], digits=2, caption="Extrait de la matrice de dissimilarité")
+
+
+
+
+
+```
+
+- **Commentaire** : Les Alpes Maritime (06) et le Var (83) ont des profils très proches (d = 1.91). Tout comme les Hauts-de-Seine (92) et les Yvelines (d= 2.08). Par contre les départements de chaque groupe sont très différents de ceux de l'autre groupe(d > 5), la plus forte différence étant observée ici entre les Hauts de Seine et le Var (d = 7.90)
+
+
+## Calcul de l'arbre couvrant minimal (*minimum spanning tree*)
+
+On va ensuite utilise un algorithme pour déterminer l'arbre couvrant minimum, c'est-à-dire le graphe permettant de relier tous les départements les uns en l'autre en empruntant des chemins où les différences sont les plus faibles possibles. 
+
+
+```{r}
+map_nb<-poly2nb(mapdon)
+lcosts <- nbcosts(map_nb,tabstd,method="euclidean",)
+#summary(lcosts)
+sim <- nb2listw(map_nb,lcosts,style="B")
+#summary(sim)
+mst <- mstree(sim)
+class(mst)
+size<-mst[,3]
+size<-size/max(size)
+mst[,3]<-0.5+4*size
+
+
+y<-unlist(sim$neighbours)
+w<-unlist(sim$weights)
+x<-as.numeric(lapply(sim$neighbours, length))
+n<-length(x)
+xx<-NULL
+for (i in 1:n) {
+  z<-rep(i,x[i])
+  xx<-c(xx,z)
+}
+
+
+q<-data.frame(xx,y,w)
+
+ctr<-st_coordinates(st_centroid(mapdon))
+
+mf_map(mapdon, type="base",col="lightyellow",lwd=0.2)
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+#segments(ctr[q[,1],1] ,ctr[q[,1],2], ctr[q[,2],1] ,ctr[q[,2],2],
+#         col="gray", lwd=1+2*q$w, lty=2)
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=mst[,3])
+
+#points(x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2,   pch=22, # bg="white", cex=3, col="black")
+#text(  x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2, #round(q$w,1), cex=0.7)
+mf_label(mapdon, var="code", col="blue",cex=0.5,halo = T,bg = "white")
+mf_layout("Arbre couvrant minimum du graphe de dissimilarité", frame=T)
+
+
+
+```
+
+- **Commentaire** : Il est intéressant de voir que l'arbre couvrant minimum respecte plus ou moins bien les limites régionales. Certaines régions sont assez compactes tandis que d'autres sont plus écartelées. Qu'en est-il pour votre région ?
+
+## Régionalisation par la méthode SKATER
+
+Cette méthode consiste à découper l'arbre couvrant minimal en plusieurs sous-arbres de façon à minimiser les différences intra-régionales et maximiser les différences inter-régionales. On ne sait pas a priori le nombre de régions qui sont nécessaire et on doit tatonner pour trouver le nombre de région permettant d'assurer un bon compromis entre efficacité (peu de régions rendent le résultat plus simple à interpréter) et homogénéité (beaucoup de régions permet d'assurer une plus grande homogénéité).
+
+
+
+```{r}
+contig_w<-queen_weights(mapdon)
+regio<-skater(6, contig_w, tab, scale_method = "standardize")
+
+
+mapdon$regio<-as.factor(regio$Clusters)
+don$regio<-as.factor(regio$Clusters)
+
+mf_map(mapdon, type="typo",var="regio",leg_title = "Regionalisation", lwd=0.4, border="white")
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=mst[,3])
+#mstk<-mst[c(2:5,7:10),]
+#segments(ctr[mstk[,1],1] ,ctr[mstk[,1],2], ctr[mstk[,2],1] ,ctr[mstk[,2],2],
+#         col="red", lwd=1+2*mstk[,3])
+#mf_label(mapdon, var="nom", col="black",cex=0.5,halo = T,bg = "white")
+mf_layout("Régionalisation par la methode SKATER", frame=T)
+```
+
+- **Commentaire** : Pour un nombre de classe donnée (ici on a choisi arbitrairement 6), la carte permet de voir à quel endroit on a découpé l'arbre couvrant minimum (ex. entre Hérault et Aude, entre Dordogne et Charentes, ...). Puis ont peut examiner si une **région administrative** appartiennent à une seule **région homogène** (ex. Bourgogne-Franche Comté) ou à plusieurs (ex. Occitanie). On peut aussi trouver des cas ou une région administrative se sépare en deux régions homogènes qui lui sont propres comme dans le cas de l'Ile-de-France.
+
+
+Par rapport à la classification, on remarque que beaucoup de départements métropolitains sont désormais fusionnés dans des ensembles plus vastes. Ainsi le Haut-Rhin (Strasbourg) se retrouve fusionnée avec la grande classe 1 caractérisée par le vote Bardella alors que son profil serait plutôt différent. Mais il n'y avaut aucune possibilité de regroupement avec des voisins similaires. 
+
+On oeut évaluer la qualité de la régionalisaiton en comparant la ressemblance moyenne de deux unités situes dans une même région et deux unités situées dans des régions différentes. Les résultats s'affichent comme suit
+
+```{r}
+regio
+```
+
+- **Commentaire** : les résultats nous indiquent que la régionalisation résume environ 47% de la variance totale du tableau de données ce qui est évidemment moins que ce que l'on aurait obtenu avec une classification sans contraintes de contiguïté en 6 classes. 
+
+
+## Profil de vote des régions issues de SKATER 
+
+Comme dans une classification, on peut analyser le profil de vote des régions obtenues
+
+```{r}
+tabstd<-as.data.frame(tabstd)
+tabstd$regions<-as.factor(regio$Clusters)
+
+catdes(tabstd,num.var = 11)
+```
+- **Commentaire** : La méthode SKATER met en évidence ... régions ayant les caractéristiques suivantes
+  + La région 1 ( ...) 
+  + La région 2 (...) .
+  + la région 3 (...)
+  + ...
+
+
+
+
+
+# D. ZOOM SUR UNE REGION : CLASSIFICATION
+
+Nous allons finalement reprendre les analyses précédentes mais en nous limitant à une seule région et en passant à l'échelle plus détaillée des circonscriptions.Commençons par la classification
+
+## Préparation des données
+
+```{r}
+### Fonds de carte
+map<-st_read("data/elect2024/map_circ.shp", quiet=T)  %>%
+    filter(nom_reg %in% myreg) %>%
+      select(code=ID,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_circ.RDS") %>%
+          filter(nom_reg %in% myreg) %>%
+          select(code=ID, nom=ID, 10:17,19,20)
+
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+
+
+```
+
+
+## Cartographie rapide
+
+Un coup d'oeil rapide sur la distribution des votes ...
+
+```{r}
+plot(mapdon[3:12])
+```
+
+
+## Analyse en composantes principales
+
+On utilise la même procédure que pour les régions
+
+```{r}
+tab<-mapdon[,3:12] %>% st_drop_geometry()
+row.names(tab)<- mapdon$code
+acp<-PCA(tab,  scale.unit = T)
+summary(acp)
+```
+
+- **Commentaires** :  Les axes sont ils différents de ceux vus pour la France entière par départements ?
+    + L'axe 1 résume  ... % de l'information et oppose les régons ... aux régions ...
+    + L'axe 2 résume  ... % de l'information et oppose les régons ... aux régions ...
+
+
+Qeu montrent les cartes
+
+```{r}
+mapdon$axe1<-acp$ind$coord[,1]
+mapdon$axe2<-acp$ind$coord[,2]
+
+par(mfrow=c(1,2))
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+
+mf_map(mapdon, type="choro", var="axe1", pal=mypal, breaks=mybreaks, lwd=0.1, border="white")
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+mf_layout("Axe1 (...%): Sigification ?", frame=T)
+
+mf_map(mapdon, type="choro", var="axe2",pal=mypal, breaks=mybreaks, lwd=0.1, border="white")
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+mf_layout("Axe2 (..%) : Signification ?", frame=T)
+```
+
+
+### Classification ascendante hiérarchique
+
+On applique ensuite une méthode de classification où vous devrez choisir le bon nombre de classes
+
+```{r}
+
+cah<-HCPC(acp, nb.clust = 3, graph=F)
+plot(cah,choice = "tree")
+catdes(cah$data.clust,num.var = 11)
+```
+
+- **Commentaire** : La classification met en évidence combien de types de région?
+  + La classe 1 ( ...) 
+  + La classe 2 (...) .
+  + la classe 3 (...)
+  + ...
+
+On peut ensuite cartogaphier les classes correspondantes pour mieux voir la distribution spatiale. Cela suppose que l'on ait donné aux classes des noms suite à l'interprétation
+
+```{r}
+mapdon$cah<-as.factor(cah$data.clust$clust)
+levels(mapdon$cah)<-c("Classe 1 : ????", 
+                      "Classe 2 = ????",
+                      "Classe 3 = ???? ")
+
+
+par(mfrow=c(1,1))
+
+mf_map(mapdon, type="typo", var="cah", lwd=0.1, border="white", leg_title = "Classes")
+mf_map(mapreg, type="base", col=NA, lwd=1, add=T)
+mf_layout("Typologie en trois classes ...", frame=T,credits = "")
+
+
+```
+
+- **Commentaire** : ...
+
+
+
+
+
+# E. ZOOM SUR UNE REGION : REGIONALISATION
+
+Nous reprenons la méthode utilisée pour la France par département, mais en l'appliquant aux circonscriptions de notre région
+
+## Préparation des données
+
+la préparation des données est la même que précédemment
+
+```{r}
+### Fonds de carte région (pour habillage)
+mapdep<-st_read("data/elect2024/map_dept.shp", quiet=T) %>%
+      st_transform(2154)
+
+### Fonds de carte
+map<-st_read("data/elect2024/map_circ.shp", quiet=T)  %>%
+    filter(nom_reg %in% myreg) %>%
+      select(code=ID,  geometry) %>%
+      st_transform(2154)
+
+### Données
+don<-readRDS("data/elect2024/don_circ.RDS") %>%
+          filter(nom_reg %in% myreg) %>%
+          select(code=ID, nom=ID, 10:17,19,20)
+
+
+### Jointure
+mapdon<-left_join(map[,1],don)
+
+```
+
+## Calcul du graphe de contiguïté
+
+On utilise la procédure `poly2nb()` du package spdep  : 
+
+```{r}
+# Table de voisinage
+map_nb<-spdep::poly2nb(mapdon,row.names = mapdon$code)
+
+# Table de poids
+map_nb_w<-nb2listw(map_nb)
+summary(map_nb_w)
+
+# Carte de voisinage
+coo<-st_coordinates(st_centroid(mapdon))
+mf_map(mapdon, type="base",col="lightyellow")
+mf_layout("Carte des liens de voisinage", frame=T)
+plot.nb(map_nb,coords = coo,add = T,col = "red",points = F)
+mf_label(mapdon, var="code", col="blue",cex=0.6,halo = T, bg="white",r = 0.1)
+```
+
+- **Commentaire** : On vérifie que le graphe est connexe et que chaque département a au moins un voisin. Certains départements situes aux extrémités du pays ont un seul voisin (ex. O6 Alpes Maritime ou 09 Finistère) tandis que d'autres ont jusqu'à 10 voisins (77 : Seine-et-Marne). Leurs possibilités de regroupement en région seront donc plus ou moins contraintes.
+
+## Calcul de la matrice de dissimilarité 
+
+Nous devons calculer la matrice de dissimilarité directement à partir du tableau des variables standardisées.
+
+```{r}
+# choix des variables
+tab<-mapdon[,3:12] %>% st_drop_geometry()
+row.names(tab)<- mapdon$code
+
+# standardisation
+tabstd <-scale(tab)
+
+# calcul des distances
+matdis <- as.matrix(dist(tabstd, method="euclidean"))
+
+```
+
+
+## Calcul de l'arbre couvrant minimal (*minimum spanning tree*)
+
+On va ensuite utilise un algorithme pour déterminer l'arbre couvrant minimum, c'est-à-dire le graphe permettant de relier tous les départements les uns en l'autre en empruntant des chemins où les différences sont les plus faibles possibles. 
+
+
+```{r}
+map_nb<-poly2nb(mapdon)
+lcosts <- nbcosts(map_nb,tabstd,method="euclidean",)
+#summary(lcosts)
+sim <- nb2listw(map_nb,lcosts,style="B")
+#summary(sim)
+mst <- mstree(sim)
+size<-mst[,3]
+size<-size/max(size)
+mst[,3]<-0.5+4*size
+
+
+y<-unlist(sim$neighbours)
+w<-unlist(sim$weights)
+x<-as.numeric(lapply(sim$neighbours, length))
+n<-length(x)
+xx<-NULL
+for (i in 1:n) {
+  z<-rep(i,x[i])
+  xx<-c(xx,z)
+}
+
+
+q<-data.frame(xx,y,w)
+
+ctr<-st_coordinates(st_centroid(mapdon))
+
+mf_map(mapdon, type="base",col="lightyellow",lwd=0.2)
+mf_map(mapdep, type="base", col=NA, lwd=1, add=T)
+#segments(ctr[q[,1],1] ,ctr[q[,1],2], ctr[q[,2],1] ,ctr[q[,2],2],
+#         col="gray", lwd=1+2*q$w, lty=2)
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=mst[,3])
+
+#points(x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2,   pch=22, # bg="white", cex=3, col="black")
+#text(  x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2, #round(q$w,1), cex=0.7)
+mf_label(mapdon, var="code", col="blue",cex=0.5,halo = T,bg = "white")
+mf_layout("Arbre couvrant minimum du graphe de dissimilarité", frame=T)
+
+
+
+```
+
+- **Commentaire** : Que remarquez-vous ?
+
+## Régionalisation par la méthode SKATER
+
+A vous de choisir le bon nombre de régions...
+
+```{r}
+contig_w<-queen_weights(mapdon)
+regio<-skater(6, contig_w, tab, scale_method = "standardize")
+
+
+mapdon$regio<-as.factor(regio$Clusters)
+don$regio<-as.factor(regio$Clusters)
+
+mf_map(mapdon, type="typo",var="regio",leg_title = "Regionalisation", lwd=0.4, border="white")
+mf_map(mapdep, type="base", col=NA, lwd=1, add=T)
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=mst[,3])
+#mstk<-mst[c(2:5,7:10),]
+#segments(ctr[mstk[,1],1] ,ctr[mstk[,1],2], ctr[mstk[,2],1] ,ctr[mstk[,2],2],
+#         col="red", lwd=1+2*mstk[,3])
+#mf_label(mapdon, var="nom", col="black",cex=0.5,halo = T,bg = "white")
+mf_layout("Régionalisation par la methode SKATER", frame=T)
+```
+
+- **Commentaire** : Quelles différences avec la classification ? 
+
+
+
+```{r}
+regio
+```
+
+- **Commentaire** : Quelle est la qualité de la régionalisation ?
+
+
+
+## Profil de vote des régions issues de SKATER 
+
+
+```{r}
+tabstd<-as.data.frame(tabstd)
+tabstd$regions<-as.factor(regio$Clusters)
+
+catdes(tabstd,num.var = 11)
+```
+
+- **Commentaire** : La méthode SKATER met en évidence ... régions ayant les caractéristiques suivantes
+  + La région 1 ( ...) 
+  + La région 2 (...) .
+  + la région 3 (...)
+  + ...
+
+

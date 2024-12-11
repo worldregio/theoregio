@@ -1,0 +1,600 @@
+---
+title: "Classification/Régionalisation"
+subtitle: "Cours Géoprisme 2024"
+date: "2024-05-13"
+date-format: iso
+author: "Claude Grasland"
+title-slide-attributes:
+  data-background-color: "#75AADB85"
+  data-background-image: img/logogeoprisme.jpg
+  data-background-size: 200px
+  data-background-opacity: "0.9"
+  data-background-position: top center
+format: 
+  revealjs:
+    bibliography: [references.bib]
+    logo: img/logogeoprisme.jpg
+    footer: "Géoprisme 2024"
+    margin: 0
+    code-line-numbers: true
+    embed-resources: true
+    smaller: true
+    scrollable: true
+    theme: [simple, style.scss]
+execute:
+  echo: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(knitr)
+library(dplyr)
+library(sf)
+library(mapsf)
+library(RColorBrewer)
+library(spdep)
+library(rgeoda)
+library(reshape2)
+library(FactoMineR)
+library(gt)
+```
+
+
+
+## Objectif 
+
+On commence par charger un jeu de données comportant plusieurs variables qui vont servir à construire une ou plusieurs matrices de dissimilarités. Dans l'exemple qui va suivre, on a choisit de prendre les deux principales listes d'extrêmes droite :
+
+- X1 : % de votes pour Jordan Bardella (RN)
+- X2 : % de votes pour Marion Marechal Le Pen (Reconquête)
+
+```{r}
+### Données
+don<-readRDS("data/elect2024/don_reg.RDS") %>%
+          select(code=code_reg, nom=nom_reg, X1=Bardella, X2=Marechal)
+don$nom<-as.factor(don$nom) 
+levels(don$nom)<-c("ACAL", "AQUI","AURA","BOFC","BRET","CVDL","IDF","OCCI","NOPI","NORM","PDL","PACA")
+don<-don %>% arrange(nom)
+don %>% as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Tableau de données**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+
+## MAP
+map<-st_read("data/elect2024/map_reg.shp", quiet=T) %>%
+  mutate(code = code_reg) %>%
+  select(code=code_reg) %>%
+  st_transform(2154)
+
+## MAPDON
+mapdon<-left_join(map,don)
+mapdon<-mapdon %>% arrange(nom)
+
+
+```
+
+
+
+
+
+# A. Classification
+
+Dans cette première partie on va essayer de regrouper les unités spatiales en trois  classes sans s'occuper de leur position spatiale.
+
+
+## Variables non standardisées
+
+```{r}
+
+
+par(mfrow=c(1,2))
+mf_map(mapdon, type="choro", var="X1", leg_title = "en %", leg_val_rnd = 1)
+mf_layout("Vote Bardella (X1)", frame=T, credits = "", arrow=F)
+mf_map(mapdon, type="choro", var="X2", leg_title = "en %", leg_val_rnd = 1)
+mf_layout("Vote Marechal (X2)", frame=T, credits = "", arrow=F)
+
+```
+
+
+## Variance
+
+On remarque immédiatement que les deux variables ont des moyennes et des variances différentes :
+
+```{r}
+moy<-apply(don[,3:4],2,mean)
+min<-apply(don[,3:4],2,min)
+max<-apply(don[,3:4],2,max)
+std<-apply(don[,3:4],2,sd)
+var<-apply(don[,3:4],2,var)
+varpct<-100*var/sum(var)
+
+tabres<-data.frame(rbind(moy,min,max,std,var, varpct))
+
+tabres %>% as.data.frame() %>% gt() %>% 
+  tab_header(
+    title = md("**Paramètres principaux (non standardisés)**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+
+## Positions
+
+La variance des scores de la variable X1  (Bardella) est  beaucoup plus forte que celle de la variable X2 (Marechal), ce qui signifie que si l'on s'en tient aux variables brutes, les différences entre régions seront liées essentiellement aux variations de la liste X1 :
+
+```{r}
+plot(don$X1,don$X2,
+     asp=1,
+     xlab = "Score Bardella en % (X1)",
+     ylab = "Score Marechal en % (X2)",
+     main = "Distances euclidiennes non standardisées",
+     pch=20)
+text(don$X1,don$X2,don$nom, pos=3, cex=0.8, col="red")
+grid()
+```
+
+## Dissimilarités
+
+Les distances euclidiennes  entre les points sont donc dépendantes pour l'essentielle des résultat du score de Bardella (X1) et très peu de celui de Marion Maréchal (X2). C'est ce que montre bien la distance de dissimilarité associée :
+
+```{r}
+DS_eucl <-as.matrix(dist(don[,3:4],method = "euclidean", upper=T,diag =F))
+colnames(DS_eucl)<-don$nom
+rownames(DS_eucl)<-don$nom
+#kable(DS_eucl, digits=2, caption = "Dissimilarité en distance euclidienne brute")
+tabres<-data.frame(DS_eucl)
+tabres  %>% gt(rownames_to_stub = T) %>% 
+  tab_header(
+    title = md("**Dissimilarité en distance euclidienne non standardisée**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+## Classification
+
+Une classification ascendante hiérarchique utilisant la méthode de Ward aboutira alors à un résultat qui est à peu près identique à celui qu'on aurait obtenu en découpant uniquement selon la variable Bardella X1.
+
+```{r}
+par(mfrow=c(1,2))
+cah1<-hclust(d = as.dist(DS_eucl),method = "ward.D")
+plot(cah1,hang = -1,main = "Distance euclidienne", 
+     frame.plot = T,sub = NA,xlab=NA, ylab= "Dissimilarité")
+
+mapdon$cah1 <-cutree(cah1, k=3)
+mf_map(mapdon, type="typo",var="cah1", leg_title = "Classes")
+mf_layout("CAH euclidienne", frame=T, credits = "", arrow=F)
+```
+
+
+
+## Variables standardisées
+
+Supposons maintenant que nous reprenions la même analyse mais en utilisant des variables standardisées dont on ramène la moyenne à 0 et l'écart-type à 1
+
+```{r}
+don$X1_std<- scale(don$X1)
+don$X2_std<- scale(don$X2)
+mapdon$X1_std<- scale(mapdon$X1)
+mapdon$X2_std<- scale(mapdon$X2)
+
+par(mfrow=c(1,2))
+mypal<- brewer.pal(6, "RdYlBu")
+mybreaks<-c(-10,-2,-1,0,1,2,10)
+mf_map(mapdon, type="choro", var="X1_std", leg_title = "var. stand.",
+       pal=mypal, breaks=mybreaks)
+mf_layout("Vote Bardella standardisé (X1_std)", frame=T, credits = "", arrow=F)
+mf_map(mapdon, type="choro", var="X2_std", leg_title = "var. stand.",
+       pal=mypal, breaks=mybreaks)
+mf_layout("Vote Marechal standardisé (X2_std)", frame=T, credits = "", arrow=F)
+
+```
+
+
+
+## Variance
+
+Désormais les deux variables ont une même moyenne et une même variances. Elles vont donc jouer un rôle équivalent dans la classification.
+
+```{r}
+moy<-apply(don[,5:6],2,mean)
+min<-apply(don[,5:6],2,min)
+max<-apply(don[,5:6],2,max)
+std<-apply(don[,5:6],2,sd)
+var<-apply(don[,5:6],2,var)
+varpct<-100*var/sum(var)
+
+tabres<-data.frame(rbind(moy,min,max,std,var, varpct))
+tabres  %>% gt(rownames_to_stub = T) %>% 
+  tab_header(
+    title = md("**Paramètres principaux (standardisés)**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+
+## Positions 
+
+Désormais ce n'est plus la région Ile-de-France qui fait figure de région exceptionnelle mais plutôt la région PACA en raison du score exceptionnellement élevé de la liste Maréchal. 
+
+```{r}
+par(mfrow=c(1,1))
+plot(don$X1_std,don$X2_std,
+     asp=1,
+     xlab = "Score Bardella standardisé (X1_std)",
+     ylab = "Score Marechal standardisé (X2_std)",
+     main = "Distances euclidiennes standardisés",
+   ylim = c(-1.5,3),
+     pch=20)
+text(don$X1_std,don$X2_std,don$nom, pos=3, cex=0.8, col="red")
+grid()
+```
+
+## Dissimilarités
+
+Les distances euclidiennes  entre les points sont donc désormais aussi dépendante du score de Bardella que celui de Maréchal en raison de la standardisation. Les très fortes dissimilarités concernent donc autant l'Ile-de-France (score exceptionnellement bas de Bardella) que la région PACA (score exceptionnellement haut de Maréchal)
+
+
+```{r}
+DS_eucl_std <-as.matrix(dist(don[,5:6],method = "euclidean", upper=T,diag = F))
+colnames(DS_eucl_std)<-don$nom
+rownames(DS_eucl_std)<-don$nom
+tabres<-data.frame(DS_eucl_std)
+tabres  %>% gt(rownames_to_stub = T) %>% 
+  tab_header(
+    title = md("**Dissimilarité en distance euclidienne standardisée**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+```
+
+## Classification
+
+La classification ascendante hiérarchique va désormais donner un résultat différent en isolant à la fois la région PACA (fort vote Bardella et Maréchal) et la région Ile de France (faible vote Bardella mais fort vote Maréchal)
+
+```{r}
+par(mfrow=c(1,2))
+cah2<-hclust(d = as.dist(DS_eucl_std),method = "ward.D")
+plot(cah2,hang = -1,main = "Distance eucl. stand.", 
+     frame.plot = T,sub = NA,xlab=NA, ylab= "Dissimilarité")
+
+mapdon$cah2 <-cutree(cah2, k=3)
+mf_map(mapdon, type="typo",var="cah2", leg_title = "Classes")
+mf_layout("CAH euclidienne stand.", frame=T, credits = "", arrow=F)
+```
+
+## Discussion
+
+### Faut-il standardiser ?
+
+- Tout dépend de l'objectif ! 
+- Si on veut conserver les **effets de masse** (poids réel des partis) il ne faut pas standardiser
+- Si l'on veut analyser la **diversité des votes** (variété des comportements), il faut au contraire standardiser pour accorder le même poids à toute les listes.
+
+### Avons nous régionalisé ?
+
+- Non, même si la classification a produit des regroupements de régions proches.
+- Pour régionaliser, il faut introduire des contraintes spatiales qui interdisent l'apparition de classes disjointes. 
+
+### Régionalisation = classificiation sous contrainte
+
+- Lorsque nous avons effectué une classification, nous avons autorisé le regroupement de n'importe quelle unité avec n'importe quelle autre. 
+- Dans le cas d'une régionalisation, nous allons limiter les choix en n'autorisant que des regroupements entre régions voisines.
+
+# Regionalisation
+
+Nous allons maintenant procéder à une régionalisation en nous limitant à une méthode très simple (skater) qui est basée sur la théorie des graphes et plus précisément sur le concept d'arbre couvrant minimal (*minimum spanning tree*).
+
+## Le graphe de voisinage
+
+Le graphe de voisinage ($G^{vois}$) est une réduction du graphe complet ($G^{tot}$) utilisé lors de la classification pour regrouper les unités spatiales. 
+
+```{r}
+## FULL LINKS
+i<-rep(1:12,12)
+j<-i[order(i)]
+link0<-data.frame(i,j) 
+link0$link<-1
+matlink0<-dcast(link0, formula = i~j, value.var="link" )
+colnames(matlink0)<-mapdon$nom
+rownames(matlink0)<-mapdon$nom
+
+
+## CONTIG LINKS
+contig<-spdep::poly2nb(mapdon,row.names = mapdon$nom)
+linky<-nb2mat(contig)
+matlink1<-linky
+matlink1[linky>0]<-1
+colnames(matlink1)<-row.names(matlink1)
+link1<-melt(matlink1) %>% filter(value>0) %>% select(i=Var1, j=Var2)
+
+
+## CENTROID
+mapctr<-st_centroid(mapdon)
+ctr <- st_coordinates(mapctr)
+
+par(mfrow=c(1,2))
+## MAP FULL LINKS
+mf_map(mapdon, type="base",col="lightyellow")
+segments(ctr[link0[,1],1] ,ctr[link0[,1],2], ctr[link0[,2],1] ,ctr[link0[,2],2],
+         col="red")
+#mf_map(mapctr, type="base",pch=20,col="white", add=T, cex=5)
+mf_label(mapctr, var="nom", col="blue",cex=0.9,halo = T,bg = "white")
+mf_layout("Classification", frame=T)
+
+
+
+## MAP CONTIG LINKS
+mf_map(mapdon, type="base",col="lightyellow")
+segments(ctr[link1[,1],1] ,ctr[link1[,1],2], ctr[link1[,2],1] ,ctr[link1[,2],2],
+         col="red")
+#mf_map(mapctr, type="base",pch=20,col="white", add=T, cex=5)
+mf_label(mapctr, var="nom", col="blue",cex=0.9,halo = T,bg = "white")
+mf_layout("Régionalisation", frame=T)
+```
+
+## Graphe de voisinage pondéré
+
+On procède à une pondération du graphe de voisinage par la dissimilarité qui sépare deux entités voisines. On peut considérer ceci comme un coût de mise en relation de deux unités différentes. On voit que le coût le plus fort est entre NOPI et IDF, le coût le plus faible entre ACAL et BOFC. 
+
+```{r}
+data<-st_drop_geometry(mapdon[,c("X1_std", "X2_std")])
+map_nb<-poly2nb(mapdon)
+lcosts <- nbcosts(map_nb,data,method="euclidean")
+#summary(lcosts)
+sim <- nb2listw(map_nb,lcosts,style="B")
+#summary(sim)
+mst <- mstree(sim)
+y<-unlist(sim$neighbours)
+w<-unlist(sim$weights)
+x<-as.numeric(lapply(sim$neighbours, length))
+n<-length(x)
+xx<-NULL
+for (i in 1:n) {
+  z<-rep(i,x[i])
+  xx<-c(xx,z)
+}
+
+
+q<-data.frame(xx,y,w)
+
+mf_map(mapdon, type="base",col="lightyellow",)
+segments(ctr[q[,1],1] ,ctr[q[,1],2], ctr[q[,2],1] ,ctr[q[,2],2],
+         col="red", lwd=1+2*q$w)
+points(x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2,   pch=22, bg="white", cex=3, col="black")
+text(  x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2, round(q$w,1), cex=0.7)
+mf_label(mapctr, var="nom", col="blue",cex=0.9,halo = T,bg = "white")
+mf_layout("Dissimilarités entre voisins", frame=T)
+
+
+```
+
+
+
+## Arbre couvrant minimum (théorie)
+
+::: columns
+::: {.column width="60%"}
+>En théorie des graphes, étant donné un graphe non orienté connexe dont les arêtes sont pondérées, un arbre couvrant minimum (ACM),de ce graphe est un arbre couvrant (sous-ensemble qui est un arbre et qui connecte tous les sommets ensemble) dont la somme des poids des arêtes est minimale (c'est-à-dire de poids inférieur ou égal à celui de tous les autres arbres couvrants du graphe).
+
+>L'arbre couvrant minimum peut s'interpréter de différentes manières selon ce que représente le graphe. De manière générale si on considère un réseau où un ensemble d'objets doivent être reliés entre eux (par exemple un réseau électrique et des habitations), l'arbre couvrant minimum est la façon de construire un tel réseau en minimisant un coût représenté par le poids des arêtes (par exemple la longueur totale de câble utilisée pour construire un réseau électrique).
+
+Source [Wikipedia France](https://fr.wikipedia.org/wiki/Arbre_couvrant_de_poids_minimal) 
+:::
+
+::: {.column width="40%"}
+![Arbre couvrant minimal : source Wikipedia, France](img/Minimum_spanning_tree.png)
+:::
+
+:::
+
+
+
+
+
+
+## Arbre couvrant minimum (application)
+
+Si on applique cette méthode à notre graphe, on obtient un arbre (en rouge) qui permet de relier toutes les unités spatiales en évitant les plus fortes dissimilarités entre voisins. A titre d'exemple, IDF est relié à CVDL qui est son voisin le moins différent. 
+
+
+```{r}
+data<-st_drop_geometry(mapdon[,c("X1_std", "X2_std")])
+map_nb<-poly2nb(mapdon)
+lcosts <- nbcosts(map_nb,data,method="euclidean")
+#summary(lcosts)
+sim <- nb2listw(map_nb,lcosts,style="B")
+#summary(sim)
+mst <- mstree(sim)
+
+y<-unlist(sim$neighbours)
+w<-unlist(sim$weights)
+x<-as.numeric(lapply(sim$neighbours, length))
+n<-length(x)
+xx<-NULL
+for (i in 1:n) {
+  z<-rep(i,x[i])
+  xx<-c(xx,z)
+}
+
+
+q<-data.frame(xx,y,w)
+
+mf_map(mapdon, type="base",col="lightyellow",)
+segments(ctr[q[,1],1] ,ctr[q[,1],2], ctr[q[,2],1] ,ctr[q[,2],2],
+         col="gray", lwd=1+2*q$w, lty=2)
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=1+2*mst[,3])
+
+points(x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2,   pch=22, bg="white", cex=3, col="black")
+text(  x=(ctr[q[,1],1] +ctr[q[,2],1])/2,  y=(ctr[q[,1],2] +ctr[q[,2],2])/2, round(q$w,1), cex=0.7)
+mf_label(mapctr, var="nom", col="blue",cex=0.9,halo = T,bg = "white")
+mf_layout("Arbre couvrant minimum du graphe de dissimilarité", frame=T)
+
+
+
+```
+
+
+## La méthode SKATER
+
+La méthode SKATER (*Spatial C(K)luster Analysis by Tree Edge Removal*) consiste d'une manière générale à découper l'arbre couvrant minimum au niveau des arêtes les plus dissemblables. Les deux premières étapes vont logiquement isoler PACA (très fort vote Maréchal) puis IDF (très faible vote Bardella).
+
+```{r}
+set.seed(42)
+contig_w<-queen_weights(mapdon)
+data<-mapdon[,3:4] %>% st_drop_geometry
+skater2<-skater(2, contig_w, data, scale_method = "standardize")
+mapdon$skater2<-as.factor(skater2$Clusters)
+skater3<-skater(3, contig_w, data, scale_method = "standardize")
+mapdon$skater3<-as.factor(skater3$Clusters)
+
+par(mfrow=c(1,2))
+# SKATER2
+mf_map(mapdon, type="typo",var="skater2",leg_title = "Régions")
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=1+2*mst[,3])
+#mstk<-mst[2:11,]
+#segments(ctr[mstk[,1],1] ,ctr[mstk[,1],2], ctr[mstk[,2],1] ,ctr[mstk[,2],2],
+#         col="red", lwd=1+2*mstk[,3])
+mf_label(mapctr, var="nom", col="black",cex=0.8,halo = T,bg = "white")
+mf_layout("SKATER k=2", frame=T)
+# SKATER3
+mf_map(mapdon, type="typo",var="skater3",leg_title = "Régions")
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=1+2*mst[,3])
+#mstk<-mst[2:10,]
+#segments(ctr[mstk[,1],1] ,ctr[mstk[,1],2], ctr[mstk[,2],1] ,ctr[mstk[,2],2],
+#         col="red", lwd=1+2*mstk[,3])
+mf_label(mapctr, var="nom", col="black",cex=0.8,halo = T,bg = "white")
+mf_layout("SKATER k=3", frame=T)
+
+```
+
+
+## La méthode SKATER
+
+Les étapes suivantes voient se détacher les régions de l'Ouest (faible vote Bardella et Maréchal) puis les régions du Nord-Ouest (fort vote Bardella mais faible vote Maréchal)
+
+```{r}
+
+skater4<-skater(4, contig_w, data, scale_method = "standardize")
+mapdon$skater4<-as.factor(skater4$Clusters)
+skater5<-skater(5, contig_w, data, scale_method = "standardize")
+mapdon$skater5<-as.factor(skater5$Clusters)
+
+par(mfrow=c(1,2))
+# SKATER4
+mf_map(mapdon, type="typo",var="skater4",leg_title = "Régions")
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=1+2*mst[,3])
+#mstk<-mst[c(2:5,7:10),]
+#segments(ctr[mstk[,1],1] ,ctr[mstk[,1],2], ctr[mstk[,2],1] ,ctr[mstk[,2],2],
+#         col="red", lwd=1+2*mstk[,3])
+mf_label(mapctr, var="nom", col="black",cex=0.8,halo = T,bg = "white")
+mf_layout("SKATER k=4", frame=T)
+# SKATER5
+mf_map(mapdon, type="typo",var="skater5",leg_title = "Régions")
+segments(ctr[mst[,1],1] ,ctr[mst[,1],2], ctr[mst[,2],1] ,ctr[mst[,2],2],
+         col="red", lwd=1+2*mst[,3])
+#mstk<-mst[c(2:5,7,8,10),]
+#segments(ctr[mstk[,1],1] ,ctr[mstk[,1],2], ctr[mstk[,2],1] ,ctr[mstk[,2],2],
+#         col="red", lwd=1+2*mstk[,3])
+mf_label(mapctr, var="nom", col="black",cex=0.8,halo = T,bg = "white")
+mf_layout("SKATER k=5", frame=T)
+
+```
+
+
+## Qualité de la régionalisation
+
+
+
+::: columns
+
+::: {.column width="60%"}
+Quelle est la qualité des différentes régionalisations obtenue ? Comme dans une analyse de variance on peut décomposer les différences en variation intra-régionale et inter-régionale. La qualité d'une régionalisation est donc la part des variations inter-régionales dans la variation totale.
+
+
+Dans notre exemple on voit que la part de variation interne diminue rapidement lorsqu'on sépare les deux régions exceptionnelles PACA et IDF du reste de la France. La partition en 3 classes résumé donc déjà 63% des différences.
+
+En passant à 4 puis 5 classes, on arrive à une partition qui résume 80 à 90% des différences de vote pour les listes d'extrême droite
+
+
+:::
+
+
+::: {.column width="40%"}
+```{r}
+
+varext<-100*as.numeric(c(0,skater2[5],skater3[5],skater4[5],skater5[5]))
+varint<-100-varext
+vartot<-rep(100,5)
+
+tabres<-data.frame(nbreg=1:5,varint, varext, vartot)
+tabres  %>% gt() %>% 
+  tab_header(
+    title = md("**Variations intra et inter-régionales**")
+  ) %>% 
+  fmt_number(
+    decimals = 1)
+
+```
+:::
+
+:::
+
+## Profil des régions
+
+Comme dans une classification, on peut termine le travail par un examen du profil des régions obtenues. 
+
+::: columns
+
+::: {.column width="60%"}
+
+```{r myplotcah}
+mydon<-data.frame(Bardella=mapdon$X1_std, Marechal=mapdon$X2_std, region = as.factor(mapdon$skater5))
+levels(mydon$region)<-c("1.Est", "2.Ouest","3.Nord-Ouest", "4.PACA","5.IDF")
+plot.new()
+plot(catdes(mydon,3,proba = 1),show = "quanti",barplot = T, add=T)
+
+```
+:::
+
+::: {.column width="40%"}
+
+```{r}
+mf_map(mapdon, type="typo",var="skater5",leg_title = "Régions")
+mf_label(mapctr, var="nom", col="black",cex=0.8,halo = T,bg = "white")
+mf_layout("SKATER k=5", frame=T)
+```
+
+:::
+:::
+
+
+## Discussion
+
+### Avantage de la régionalisation / classification
+
+- La régionalisation fait émerger des **régions homogènes** c'est-à-dire des groupes d'entités ressemblantes et voisines.
+- la régionalisation implique une **analyse géographique** alors que la classification adopte une **perspective statistique**.  
+
+### Inconvénients de la régionalisation / classification
+
+- A nombre égal de classes, la qualité du résumé offert par une régionalisation est toujours **inférieur ou égal** à celui d'une classification. 
+- En l'absence d'**autocorrélation spatiale positive**, la régionalisation est inefficace et peu conduire à des regroupements absurdes. 
+
+### Diversité des algorithmes de régionalisation
+
+- la définition du voisinage par la présence d'une frontière commune n'est pas la seule manière de définir les proximités qui servent de contrainte à la régionalisation. 
+- la méthode SKATER est un algorithme parmi d'autres pour chercher des groupes d'unités spatiales formant des régions homogènes.
+- comme dans le cas de la classification, le choix des variables, de leur standardisation et de leur transformation en matrice de similarité implique des choix précis. 
+
+
